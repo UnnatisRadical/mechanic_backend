@@ -14,9 +14,8 @@ function tryParseJSON(jsonString) {
 
 export const createBill = async (req, res) => {
   try {
-    let { admin_id, customer_name, contact, service_taken, other_charges, discount, total_bill, date, tax_details, payment_method } = req.body;
+    let { admin_id, customer_name, contact, service_taken, other_charges, discount, received, total_bill, date, tax_details, payment_method } = req.body;
     
-    // Validation
     if (!admin_id || !customer_name || !contact || !service_taken || service_taken.length === 0) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -25,6 +24,9 @@ export const createBill = async (req, res) => {
     }
     if (typeof discount !== 'number' || discount < 0) {
       return res.status(400).json({ error: "Invalid discount" });
+    }
+    if (typeof received !== 'number' || received < 0) {
+      return res.status(400).json({ error: "Invalid received amount" });
     }
     if (typeof total_bill !== 'number' || total_bill < 0) {
       return res.status(400).json({ error: "Invalid total bill" });
@@ -36,14 +38,17 @@ export const createBill = async (req, res) => {
       return res.status(400).json({ error: "Invalid payment method" });
     }
 
-    // Validate discount
     const serviceTotal = service_taken.reduce((sum, service) => sum + parseFloat(service.price || 0), 0);
     const subtotalBeforeTax = serviceTotal + other_charges - discount;
     if (subtotalBeforeTax < 0) {
       return res.status(400).json({ error: "Discount cannot exceed service total plus other charges" });
     }
-
     const tax_rate = tax_details?.wasTaxApplied ? parseFloat(tax_details?.taxRate) || 0 : null;
+    const totalWithTax = subtotalBeforeTax > 0 ? subtotalBeforeTax + (subtotalBeforeTax * (tax_rate || 0) / 100) : 0;
+    if (received > totalWithTax) {
+      return res.status(400).json({ error: "Received amount cannot exceed total bill" });
+    }
+    const balance = totalWithTax - received;
 
     const utcDate = new Date(date);
     const istOffset = 5.5 * 60 * 60 * 1000;
@@ -54,8 +59,8 @@ export const createBill = async (req, res) => {
 
     const query = `
       INSERT INTO bills 
-        (admin_id, customer_name, contact, service_taken, other_charges, discount, total_bill, date, tax_rate, payment_method)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (admin_id, customer_name, contact, service_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_method)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
@@ -65,6 +70,8 @@ export const createBill = async (req, res) => {
       serviceTakenFormatted, 
       other_charges, 
       discount, 
+      received, 
+      balance,
       total_bill, 
       date,
       tax_rate,
@@ -102,6 +109,7 @@ export const getPreviousCustomers = (req, res) => {
     res.json(results);
   });
 };
+
 
 export const updateBill = async (req, res) => {
   try {
@@ -201,16 +209,42 @@ export const updateBill = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+export const getWorkHistory = async (req, res) => {
+  try {
+    const { admin_id } = req.query;
 
+    const query = `
+      SELECT 
+        id AS bill_id, 
+        customer_name, 
+        date, 
+        service_taken, 
+        total_bill AS total_with_tax
+      FROM bills 
+      WHERE admin_id = ?
+    `;
+
+    db.query(query, [admin_id], (err, results) => {
+      if (err) {
+        console.error("DB Query Error:", err);
+        return res.status(500).json({ error: "Database query failed", details: err });
+      }
+
+      console.log("WorkHistory query results:", JSON.stringify(results, null, 2));
+      const bills = results.map(bill => ({
+        ...bill,
+        service_taken: tryParseJSON(bill.service_taken),
+      }));
+
+      res.status(200).json(bills);
+    });
+  } catch (error) {
+    console.error("Error fetching work history:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
 export const updateCustomerDetails = async (req, res) => {
   const { admin_id, old_contact, new_contact, customer_name } = req.body;
-
-  console.log("Received update request with:", {
-    admin_id,
-    old_contact,
-    new_contact,
-    customer_name
-  });
 
   const query = `
     UPDATE bills 
@@ -221,7 +255,6 @@ export const updateCustomerDetails = async (req, res) => {
   db.query(query, 
     [customer_name, new_contact, admin_id, old_contact],
     (err, result) => {
-      console.log("Update result:", { err, result });
       
       if (err) {
         console.error("Database error:", err);
@@ -268,41 +301,6 @@ export const deleteBill = async (req, res) => {
   }
 };
 
-export const getWorkHistory = async (req, res) => {
-  try {
-    const { admin_id } = req.query;
-
-    const query = `
-      SELECT 
-        id AS bill_id, 
-        customer_name, 
-        date, 
-        service_taken, 
-        total_bill AS total_with_tax
-      FROM bills 
-      WHERE admin_id = ?
-    `;
-
-    db.query(query, [admin_id], (err, results) => {
-      if (err) {
-        console.error("DB Query Error:", err);
-        return res.status(500).json({ error: "Database query failed", details: err });
-      }
-
-      console.log("WorkHistory query results:", JSON.stringify(results, null, 2));
-      const bills = results.map(bill => ({
-        ...bill,
-        service_taken: tryParseJSON(bill.service_taken),
-      }));
-
-      res.status(200).json(bills);
-    });
-  } catch (error) {
-    console.error("Error fetching work history:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
 export const getBillById = async (req, res) => {
   try {
     const { bill_id } = req.params;
@@ -316,6 +314,8 @@ export const getBillById = async (req, res) => {
         service_taken, 
         other_charges, 
         discount, 
+        received,
+        balance,
         total_bill, 
         date, 
         tax_rate,
@@ -347,4 +347,97 @@ export const getBillById = async (req, res) => {
     console.error("Error fetching bill:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
+};
+
+export const updatePayment = async (req, res) => {
+  try {
+    const { bill_id } = req.params;
+    const { admin_id, received, balance } = req.body;
+
+    if (!admin_id) {
+      return res.status(400).json({ error: "Admin ID is required" });
+    }
+    if (typeof received !== 'number' || received < 0) {
+      return res.status(400).json({ error: "Invalid received amount" });
+    }
+    if (typeof balance !== 'number' || balance < 0) {
+      return res.status(400).json({ error: "Invalid balance amount" });
+    }
+
+    const query = `
+      UPDATE bills 
+      SET 
+        received = ?,
+        balance = ?
+      WHERE bill_id = ? AND admin_id = ?
+    `;
+
+    const values = [received, balance, bill_id, admin_id];
+
+    console.log("Updating payment with values:", values);
+
+    db.query(query, values, (err, result) => {
+      if (err) {
+        console.error("DB Update Error:", err);
+        return res.status(500).json({ error: "Database update failed", details: err });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Bill not found or unauthorized" });
+      }
+
+      const fetchQuery = `
+        SELECT received, balance 
+        FROM bills 
+        WHERE bill_id = ? AND admin_id = ?
+      `;
+      db.query(fetchQuery, [bill_id, admin_id], (fetchErr, fetchResult) => {
+        if (fetchErr) {
+          console.error("DB Fetch Error:", fetchErr);
+        } else {
+          console.log("Updated bill values:", fetchResult[0]);
+        }
+      });
+
+      res.status(200).json({ message: "Payment updated successfully" });
+    });
+  } catch (error) {
+    console.error("Error updating payment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getPendingBalances = (req, res) => {
+  const { admin_id } = req.params;
+
+  if (!admin_id) {
+    console.error("Admin ID missing in request");
+    return res.status(400).json({ success: false, error: "Admin ID is required" });
+  }
+
+  const query = `
+    SELECT 
+      bill_id,
+      customer_name,
+      date,
+      balance,
+      total_bill,
+      received
+    FROM bills 
+    WHERE admin_id = ? AND balance > 0
+    ORDER BY date DESC
+  `;
+
+  db.query(query, [admin_id], (err, results) => {
+    if (err) {
+      console.error("DB Query Error:", err.message);
+      return res.status(500).json({ 
+        success: false, 
+        error: "Database query failed", 
+        details: err.message 
+      });
+    }
+
+    res.status(200).json(results);
+  });
 };

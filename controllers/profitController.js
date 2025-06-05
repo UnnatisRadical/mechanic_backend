@@ -11,7 +11,6 @@ const calculateProfit = (req, res) => {
     });
   }
 
-  console.log("Calculate Profit - adminId:", adminId, "startDate:", startDate, "endDate:", endDate, "range:", range);
 
   // Fetch expenses for the date range
   const startOfStartDate = new Date(`${startDate}T00:00:00.000Z`);
@@ -19,7 +18,6 @@ const calculateProfit = (req, res) => {
   const startOfStartDateLocal = startOfStartDate.toISOString().slice(0, 19).replace('T', ' ');
   const endOfEndDateLocal = endOfEndDate.toISOString().slice(0, 19).replace('T', ' ');
 
-  console.log("Expenses Date Range (Local):", startOfStartDateLocal, "to", endOfEndDateLocal);
 
   db.query(
     `SELECT SUM(amount) as totalExpenses 
@@ -35,15 +33,13 @@ const calculateProfit = (req, res) => {
         });
       }
 
-      console.log("Expenses Query Result:", expenseResults);
+      
       const totalExpenses = parseFloat(expenseResults[0].totalExpenses || 0);
-      console.log("Total Expenses:", totalExpenses);
+    
 
       // Fetch bills for the date range (income)
       const startOfStartDateIST = new Date(startOfStartDate.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
       const endOfEndDateIST = new Date(endOfEndDate.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-
-      console.log("Bills Date Range (IST):", startOfStartDateIST, "to", endOfEndDateIST);
 
       db.query(
         `SELECT SUM(total_bill) as totalIncome 
@@ -59,9 +55,9 @@ const calculateProfit = (req, res) => {
             });
           }
 
-          console.log("Bills Query Result:", billResults);
+          
           const totalIncome = parseFloat(billResults[0].totalIncome || 0);
-          console.log("Total Income:", totalIncome);
+        
           const profit = totalIncome - totalExpenses;
 
           res.status(200).json({
@@ -88,7 +84,7 @@ const getFinanceSummary = (req, res) => {
     });
   }
 
-  console.log("Finance Summary - adminId:", adminId, "startDate:", startDate, "endDate:", endDate);
+  
 
   // Fetch expenses for the date range
   const startOfStartDate = new Date(`${startDate}T00:00:00.000Z`);
@@ -96,7 +92,7 @@ const getFinanceSummary = (req, res) => {
   const startOfStartDateLocal = startOfStartDate.toISOString().slice(0, 19).replace('T', ' ');
   const endOfEndDateLocal = endOfEndDate.toISOString().slice(0, 19).replace('T', ' ');
 
-  console.log("Expenses Date Range (Local):", startOfStartDateLocal, "to", endOfEndDateLocal);
+
 
   db.query(
     `SELECT SUM(amount) as totalExpenses 

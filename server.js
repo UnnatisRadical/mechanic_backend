@@ -20,8 +20,6 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-app.get("/", (req, res) => res.send("Running Mechanic Backend !"));
-
 app.use("/api/admin", adminRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/bills", billRoutes);
