@@ -15,39 +15,25 @@ function tryParseJSON(jsonString) {
 export const createBill = async (req, res) => {
   try {
     let { admin_id, customer_name, contact, service_taken, other_charges, discount, received, total_bill, date, tax_details, payment_method } = req.body;
-    
-    if (!admin_id || !customer_name || !contact || !service_taken || service_taken.length === 0) {
+
+    if (!admin_id || !customer_name || !contact || service_taken.length === 0) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    if (typeof other_charges !== 'number' || other_charges < 0) {
-      return res.status(400).json({ error: "Invalid other charges" });
-    }
-    if (typeof discount !== 'number' || discount < 0) {
-      return res.status(400).json({ error: "Invalid discount" });
-    }
-    if (typeof received !== 'number' || received < 0) {
-      return res.status(400).json({ error: "Invalid received amount" });
-    }
-    if (typeof total_bill !== 'number' || total_bill < 0) {
-      return res.status(400).json({ error: "Invalid total bill" });
-    }
-    if (!date || isNaN(new Date(date))) {
-      return res.status(400).json({ error: "Invalid date" });
-    }
-    if (!['cash', 'e-transfer'].includes(payment_method)) {
-      return res.status(400).json({ error: "Invalid payment method" });
-    }
+    if (typeof other_charges !== 'number' || other_charges < 0) return res.status(400).json({ error: "Invalid other charges" });
+    if (typeof discount !== 'number' || discount < 0) return res.status(400).json({ error: "Invalid discount" });
+    if (typeof received !== 'number' || received < 0) return res.status(400).json({ error: "Invalid received amount" });
+    if (typeof total_bill !== 'number' || total_bill < 0) return res.status(400).json({ error: "Invalid total bill" });
+    if (!date || isNaN(new Date(date))) return res.status(400).json({ error: "Invalid date" });
+    if (!['cash', 'e-transfer'].includes(payment_method)) return res.status(400).json({ error: "Invalid payment method" });
 
     const serviceTotal = service_taken.reduce((sum, service) => sum + parseFloat(service.price || 0), 0);
     const subtotalBeforeTax = serviceTotal + other_charges - discount;
-    if (subtotalBeforeTax < 0) {
-      return res.status(400).json({ error: "Discount cannot exceed service total plus other charges" });
-    }
+    if (subtotalBeforeTax < 0) return res.status(400).json({ error: "Discount cannot exceed service total plus other charges" });
+
     const tax_rate = tax_details?.wasTaxApplied ? parseFloat(tax_details?.taxRate) || 0 : null;
     const totalWithTax = subtotalBeforeTax > 0 ? subtotalBeforeTax + (subtotalBeforeTax * (tax_rate || 0) / 100) : 0;
-    if (received > totalWithTax) {
-      return res.status(400).json({ error: "Received amount cannot exceed total bill" });
-    }
+    if (received > totalWithTax) return res.status(400).json({ error: "Received amount cannot exceed total bill" });
+
     const balance = totalWithTax - received;
 
     const utcDate = new Date(date);
@@ -57,35 +43,48 @@ export const createBill = async (req, res) => {
 
     const serviceTakenFormatted = JSON.stringify(service_taken);
 
-    const query = `
-      INSERT INTO bills 
-        (admin_id, customer_name, contact, service_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_method)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      admin_id, 
-      customer_name, 
-      contact, 
-      serviceTakenFormatted, 
-      other_charges, 
-      discount, 
-      received, 
-      balance,
-      total_bill, 
-      date,
-      tax_rate,
-      payment_method
-    ];
-
-    db.query(query, values, (err, result) => {
+    // Get the latest invoiceid for this admin_id
+    const getInvoiceIdQuery = `SELECT MAX(invoiceid) as maxInvoiceId FROM bills WHERE admin_id = ?`;
+    db.query(getInvoiceIdQuery, [admin_id], (err, result) => {
       if (err) {
-        console.error("DB Insert Error:", err);
-        return res.status(500).json({ error: "Database insert failed", details: err });
+        console.error("Error fetching invoiceid:", err);
+        return res.status(500).json({ error: "Failed to fetch invoiceid" });
       }
-      res.status(201).json({ 
-        message: "Bill created successfully", 
-        bill_id: result.insertId 
+
+      const nextInvoiceId = result[0].maxInvoiceId ? result[0].maxInvoiceId + 1 : 1; // start from 1 if no record exists
+
+      const insertQuery = `
+        INSERT INTO bills 
+          (admin_id, invoiceid, customer_name, contact, service_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        admin_id, 
+        nextInvoiceId, 
+        customer_name, 
+        contact, 
+        serviceTakenFormatted, 
+        other_charges, 
+        discount, 
+        received, 
+        balance,
+        total_bill, 
+        date,
+        tax_rate,
+        payment_method
+      ];
+
+      db.query(insertQuery, values, (err, result) => {
+        if (err) {
+          console.error("DB Insert Error:", err);
+          return res.status(500).json({ error: "Database insert failed", details: err });
+        }
+        res.status(201).json({ 
+          message: "Bill created successfully", 
+          bill_id: result.insertId,
+          invoiceid: nextInvoiceId
+        });
       });
     });
   } catch (error) {
@@ -306,24 +305,24 @@ export const getBillById = async (req, res) => {
     const { bill_id } = req.params;
 
     const query = `
-      SELECT 
-        bill_id, 
-        admin_id, 
-        customer_name, 
-        contact, 
-        service_taken, 
-        other_charges, 
-        discount, 
-        received,
-        balance,
-        total_bill, 
-        date, 
-        tax_rate,
-        payment_method
-      FROM bills 
-      WHERE bill_id = ?
-    `;
-
+  SELECT 
+    bill_id, 
+    admin_id, 
+    invoiceid,
+    customer_name, 
+    contact, 
+    service_taken, 
+    other_charges, 
+    discount, 
+    received,
+    balance,
+    total_bill, 
+    date, 
+    tax_rate,
+    payment_method
+  FROM bills 
+  WHERE bill_id = ?
+`;
     db.query(query, [bill_id], (err, results) => {
       if (err) {
         console.error("DB Query Error:", err);

@@ -17,10 +17,11 @@ export const getDashboardData = async (req, res) => {
     );
 
     const [yesterday] = await connection.query(
-      `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? AND date = CURDATE() - INTERVAL 1 DAY`,
-      [admin_id]
-    );
-
+  `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? 
+   AND date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) 
+   AND date < CURDATE()`,
+  [admin_id]
+);
     const [week] = await connection.query(
       `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? AND YEARWEEK(date, 1) = YEARWEEK(CURDATE(), 1)`,
       [admin_id]

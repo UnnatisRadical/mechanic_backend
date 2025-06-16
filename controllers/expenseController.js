@@ -194,3 +194,39 @@ export const updateExpense = (req, res) => {
     }
   );
 };
+export const deleteExpense = (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      message: "Expense ID is required"
+    });
+  }
+
+  db.query(
+    `DELETE FROM expenses WHERE id = ?`,
+    [id],
+    (error, result) => {
+      if (error) {
+        console.error("Error deleting expense:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete expense"
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Expense not found"
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Expense deleted successfully"
+      });
+    }
+  );
+};

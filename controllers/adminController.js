@@ -43,38 +43,56 @@ export const registerAdmin = async (req, res) => {
 export const loginAdmin = (req, res) => {
   const { email, password } = req.body;
 
+  // Add validation for empty fields
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
   db.query("SELECT * FROM admins WHERE email = ?", [email], async (err, results) => {
-    if (err || results.length === 0) {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ message: "Database error" });
+    }
+    
+    if (results.length === 0) {
+      console.log('No admin found with email:', email);
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const isValidPassword = await bcrypt.compare(password, results[0].password);
-    if (!isValidPassword) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-
-    if (!process.env.SECRET_KEY) {
-      return res.status(500).json({ message: "JWT Secret Key is missing" });
-    }
-
-    const token = jwt.sign({ id: results[0].id }, process.env.SECRET_KEY, { expiresIn: "24h" });
-
-    res.json({
-      message: "Login successful",
-      token,
-      admin: {
-        id: results[0].id,
-        firstName: results[0].firstName,
-        lastName: results[0].lastName,
-        email: results[0].email,
-        contact: results[0].contact,
-        country: results[0].country,
-        currency: results[0].currency
+    const admin = results[0];
+    
+    try {
+      const isValidPassword = await bcrypt.compare(password, admin.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Invalid email or password" });
       }
-    });
+      if (!process.env.SECRET_KEY) {
+        console.error('JWT Secret Key is missing');
+        return res.status(500).json({ message: "Server configuration error" });
+      }
+
+      const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, { expiresIn: "24h" });
+      
+      res.json({
+        message: "Login successful",
+        token,
+        admin: {
+          id: admin.id,
+          firstName: admin.firstName,
+          lastName: admin.lastName,
+          email: admin.email,
+          contact: admin.contact,
+          country: admin.country,
+          currency: admin.currency,
+          country_code: admin.country_code
+        }
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: "Server error during login" });
+    }
   });
 };
-
 // ✅ Get Admin Details by ID
 export const getAdminById = (req, res) => {
   const adminId = req.params.id;
@@ -175,7 +193,7 @@ export const getAdminSettings = async (req, res) => {
   try {
     const adminId = req.params.id;
     db.query(
-      "SELECT currency, country FROM admins WHERE id = ?",
+      "SELECT currency, country, country_code FROM admins WHERE id = ?",
       [adminId],
       (err, results) => {
         if (err) return res.status(500).json({ message: "Database error" });
@@ -188,16 +206,14 @@ export const getAdminSettings = async (req, res) => {
   }
 };
 
-
 export const updateAdminSettings = async (req, res) => {
   const adminId = req.params.id;
-  const { currency, country } = req.body;
+  const { currency, country, country_code } = req.body;
 
-  // Get current settings first
   try {
     const currentSettings = await new Promise((resolve, reject) => {
       db.query(
-        "SELECT currency, country FROM admins WHERE id = ?",
+        "SELECT currency, country, country_code FROM admins WHERE id = ?",
         [adminId],
         (err, results) => {
           if (err) reject(err);
@@ -210,24 +226,23 @@ export const updateAdminSettings = async (req, res) => {
       return res.status(404).json({ message: "Admin not found" });
     }
 
-    // Prepare update values - use existing values if not provided
     const updateValues = {
       currency: currency || currentSettings.currency,
-      country: country || currentSettings.country
+      country: country || currentSettings.country,
+      country_code: country_code || currentSettings.country_code
     };
 
     db.query(
-      "UPDATE admins SET currency = ?, country = ? WHERE id = ?",
-      [updateValues.currency, updateValues.country, adminId],
+      "UPDATE admins SET currency = ?, country = ?, country_code = ? WHERE id = ?",
+      [updateValues.currency, updateValues.country, updateValues.country_code, adminId],
       (err, result) => {
         if (err) return res.status(500).json({ message: "Database error" });
         if (result.affectedRows === 0) return res.status(404).json({ message: "Admin not found" });
-        
-        res.json({ 
+
+        res.json({
           success: true,
           message: "Settings updated",
-          currency: updateValues.currency,
-          country: updateValues.country
+          ...updateValues
         });
       }
     );
