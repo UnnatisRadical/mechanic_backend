@@ -17,6 +17,10 @@ import profitRoutes from "./routes/profitRoutes.js"
 dotenv.config();
 const app = express();
 
+app.get("/", (req, res) => {
+    res.send("Hello Mechanic Backend");
+});
+
 app.use(cors());
 app.use(bodyParser.json());
 
