@@ -7,15 +7,19 @@ dotenv.config();
 
 // ✅ Register Admin
 export const registerAdmin = async (req, res) => {
-  const { firstName, lastName, email, contact, country, currency, password } = req.body;
+  const { shop_name, email, contact, country, currency, password } = req.body;
 
   try {
     // Check if email already exists
     const existingAdmin = await new Promise((resolve, reject) => {
-      db.query("SELECT * FROM admins WHERE email = ?", [email], (err, results) => {
-        if (err) reject(err);
-        resolve(results);
-      });
+      db.query(
+        "SELECT * FROM admins WHERE email = ?",
+        [email],
+        (err, results) => {
+          if (err) reject(err);
+          resolve(results);
+        },
+      );
     });
 
     if (existingAdmin.length > 0) {
@@ -27,12 +31,15 @@ export const registerAdmin = async (req, res) => {
 
     // Insert into database
     db.query(
-      "INSERT INTO admins (firstName, lastName, email, contact, country, currency, password) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [firstName, lastName, email, contact, country, currency || 'USD', hashedPassword],
+      "INSERT INTO admins (shop_name, email, contact, country, currency, password) VALUES (?, ?, ?, ?, ?, ?)",
+      [shop_name, email, contact, country, currency || "", hashedPassword],
       (err, result) => {
         if (err) return res.status(500).json({ message: err.message });
-        res.json({ message: "Admin registered successfully", adminId: result.insertId });
-      }
+        res.json({
+          message: "Admin registered successfully",
+          adminId: result.insertId,
+        });
+      },
     );
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -48,71 +55,80 @@ export const loginAdmin = (req, res) => {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
-  db.query("SELECT * FROM admins WHERE email = ?", [email], async (err, results) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ message: "Database error" });
-    }
-    
-    if (results.length === 0) {
-      console.log('No admin found with email:', email);
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
+  db.query(
+    "SELECT * FROM admins WHERE email = ?",
+    [email],
+    async (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Database error" });
+      }
 
-    const admin = results[0];
-    
-    try {
-      const isValidPassword = await bcrypt.compare(password, admin.password);
-      if (!isValidPassword) {
+      if (results.length === 0) {
+        console.log("No admin found with email:", email);
         return res.status(401).json({ message: "Invalid email or password" });
       }
-      if (!process.env.SECRET_KEY) {
-        console.error('JWT Secret Key is missing');
-        return res.status(500).json({ message: "Server configuration error" });
-      }
 
-      const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, { expiresIn: "24h" });
-      
-      res.json({
-        message: "Login successful",
-        token,
-        admin: {
-          id: admin.id,
-          firstName: admin.firstName,
-          lastName: admin.lastName,
-          email: admin.email,
-          contact: admin.contact,
-          country: admin.country,
-          currency: admin.currency,
-          country_code: admin.country_code
+      const admin = results[0];
+
+      try {
+        const isValidPassword = await bcrypt.compare(password, admin.password);
+        if (!isValidPassword) {
+          return res.status(401).json({ message: "Invalid email or password" });
         }
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ message: "Server error during login" });
-    }
-  });
+        if (!process.env.SECRET_KEY) {
+          console.error("JWT Secret Key is missing");
+          return res
+            .status(500)
+            .json({ message: "Server configuration error" });
+        }
+
+        const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, {
+          expiresIn: "24h",
+        });
+
+        res.json({
+          message: "Login successful",
+          token,
+          admin: {
+            id: admin.id,
+            shop_name: admin.shop_name,
+            email: admin.email,
+            contact: admin.contact,
+            country: admin.country,
+            currency: admin.currency,
+            country_code: admin.country_code,
+          },
+        });
+      } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ message: "Server error during login" });
+      }
+    },
+  );
 };
 // ✅ Get Admin Details by ID
 export const getAdminById = (req, res) => {
   const adminId = req.params.id;
 
   db.query(
-    "SELECT id, firstName, lastName, email, contact, country, currency FROM admins WHERE id = ?",
+    "SELECT * FROM admins WHERE id = ?",
     [adminId],
     (err, result) => {
       if (err) return res.status(500).json({ message: "Database error" });
-      if (result.length === 0) return res.status(404).json({ message: "Admin not found" });
+      if (result.length === 0)
+        return res.status(404).json({ message: "Admin not found" });
 
       res.json(result[0]);
-    }
+    },
   );
 };
 
 // ✅ Update Admin Details
 export const updateAdmin = async (req, res) => {
   const adminId = req.params.id;
-  const { firstName, lastName, email, contact, country } = req.body;
+  const { shop_name, firstName, lastName, email, contact, country } = req.body;
+  console.log("Updating admin details for ID:", req.body);
 
   try {
     const emailCheck = await new Promise((resolve, reject) => {
@@ -120,9 +136,10 @@ export const updateAdmin = async (req, res) => {
         "SELECT * FROM admins WHERE email = ? AND id != ?",
         [email, adminId],
         (err, results) => {
+          console.log("Email check results:", results);
           if (err) reject(err);
           resolve(results);
-        }
+        },
       );
     });
 
@@ -131,16 +148,19 @@ export const updateAdmin = async (req, res) => {
     }
 
     db.query(
-      "UPDATE admins SET firstName = ?, lastName = ?, email = ?, contact = ?, country = ? WHERE id = ?",
-      [firstName, lastName, email, contact, country, adminId],
+      "UPDATE admins SET shop_name = ?, firstName = ?, lastName = ?, email = ?, contact = ?, country = ? WHERE id = ?",
+      [shop_name, firstName, lastName, email, contact, country, adminId],
       (err, result) => {
+        console.log("err:", err);
         if (err) return res.status(500).json({ message: err.message });
-        if (result.affectedRows === 0) return res.status(404).json({ message: "Admin not found" });
+        if (result.affectedRows === 0)
+          return res.status(404).json({ message: "Admin not found" });
 
         res.json({ message: "Profile updated successfully" });
-      }
+      },
     );
   } catch (error) {
+    console.log("Error updating admin:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -153,10 +173,14 @@ export const changeAdminPassword = async (req, res) => {
   try {
     // Get current admin data
     const admin = await new Promise((resolve, reject) => {
-      db.query("SELECT * FROM admins WHERE id = ?", [adminId], (err, results) => {
-        if (err) reject(err);
-        resolve(results[0]);
-      });
+      db.query(
+        "SELECT * FROM admins WHERE id = ?",
+        [adminId],
+        (err, results) => {
+          if (err) reject(err);
+          resolve(results[0]);
+        },
+      );
     });
 
     if (!admin) {
@@ -164,7 +188,10 @@ export const changeAdminPassword = async (req, res) => {
     }
 
     // Verify current password
-    const isValidPassword = await bcrypt.compare(currentPassword, admin.password);
+    const isValidPassword = await bcrypt.compare(
+      currentPassword,
+      admin.password,
+    );
     if (!isValidPassword) {
       return res.status(401).json({ message: "Current password is incorrect" });
     }
@@ -178,10 +205,11 @@ export const changeAdminPassword = async (req, res) => {
       [hashedNewPassword, adminId],
       (err, result) => {
         if (err) return res.status(500).json({ message: err.message });
-        if (result.affectedRows === 0) return res.status(404).json({ message: "Admin not found" });
+        if (result.affectedRows === 0)
+          return res.status(404).json({ message: "Admin not found" });
 
         res.json({ message: "Password updated successfully" });
-      }
+      },
     );
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -197,9 +225,10 @@ export const getAdminSettings = async (req, res) => {
       [adminId],
       (err, results) => {
         if (err) return res.status(500).json({ message: "Database error" });
-        if (results.length === 0) return res.status(404).json({ message: "Admin not found" });
+        if (results.length === 0)
+          return res.status(404).json({ message: "Admin not found" });
         res.json(results[0]);
-      }
+      },
     );
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -218,7 +247,7 @@ export const updateAdminSettings = async (req, res) => {
         (err, results) => {
           if (err) reject(err);
           resolve(results[0]);
-        }
+        },
       );
     });
 
@@ -229,22 +258,28 @@ export const updateAdminSettings = async (req, res) => {
     const updateValues = {
       currency: currency || currentSettings.currency,
       country: country || currentSettings.country,
-      country_code: country_code || currentSettings.country_code
+      country_code: country_code || currentSettings.country_code,
     };
 
     db.query(
       "UPDATE admins SET currency = ?, country = ?, country_code = ? WHERE id = ?",
-      [updateValues.currency, updateValues.country, updateValues.country_code, adminId],
+      [
+        updateValues.currency,
+        updateValues.country,
+        updateValues.country_code,
+        adminId,
+      ],
       (err, result) => {
         if (err) return res.status(500).json({ message: "Database error" });
-        if (result.affectedRows === 0) return res.status(404).json({ message: "Admin not found" });
+        if (result.affectedRows === 0)
+          return res.status(404).json({ message: "Admin not found" });
 
         res.json({
           success: true,
           message: "Settings updated",
-          ...updateValues
+          ...updateValues,
         });
-      }
+      },
     );
   } catch (error) {
     res.status(500).json({ message: "Server error" });
