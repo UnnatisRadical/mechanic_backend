@@ -14,62 +14,94 @@ function tryParseJSON(jsonString) {
 
 export const createBill = async (req, res) => {
   try {
-    let { admin_id, customer_name, contact, service_taken, other_charges, discount, received, total_bill, date, tax_details, payment_method } = req.body;
+    let {
+      admin_id,
+      custId,
+      customer_name,
+      contact,
+      customer_email,
+      customer_address,
+      vehicle_details,
+      service_taken,
+      parts_taken,
+      other_charges,
+      discount,
+      received,
+      total_bill,
+      date,
+      tax_details,
+      payment_method
+    } = req.body;
 
-    if (!admin_id || !customer_name || !contact || service_taken.length === 0) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Strict Validations
+    if (!admin_id || !customer_name || !contact || (service_taken.length === 0 && parts_taken.length === 0)) {
+      return res.status(400).json({ error: "Missing required fields. Customer details and items are required." });
+    }
+    if (typeof vehicle_details === 'object' && Object.keys(vehicle_details).length === 0) {
+      return res.status(400).json({ error: "Vehicle details cannot be empty." });
     }
     if (typeof other_charges !== 'number' || other_charges < 0) return res.status(400).json({ error: "Invalid other charges" });
     if (typeof discount !== 'number' || discount < 0) return res.status(400).json({ error: "Invalid discount" });
     if (typeof received !== 'number' || received < 0) return res.status(400).json({ error: "Invalid received amount" });
     if (typeof total_bill !== 'number' || total_bill < 0) return res.status(400).json({ error: "Invalid total bill" });
     if (!date || isNaN(new Date(date))) return res.status(400).json({ error: "Invalid date" });
-    if (!['cash', 'e-transfer'].includes(payment_method)) return res.status(400).json({ error: "Invalid payment method" });
+    if (!['cash', 'online'].includes(payment_method)) return res.status(400).json({ error: "Invalid payment method" });
 
+    // Precise Backend Calculations for validation Cross-check
     const serviceTotal = service_taken.reduce((sum, service) => sum + parseFloat(service.price || 0), 0);
-    const subtotalBeforeTax = serviceTotal + other_charges - discount;
-    if (subtotalBeforeTax < 0) return res.status(400).json({ error: "Discount cannot exceed service total plus other charges" });
+    const partsTotal = parts_taken.reduce((sum, part) => sum + (parseFloat(part.sellingPrice || 0) * (part.qty || 1)), 0);
+
+    const subtotalBeforeTax = serviceTotal + partsTotal + other_charges - discount;
+    if (subtotalBeforeTax < 0) return res.status(400).json({ error: "Discount cannot exceed items total plus other charges" });
 
     const tax_rate = tax_details?.wasTaxApplied ? parseFloat(tax_details?.taxRate) || 0 : null;
     const totalWithTax = subtotalBeforeTax > 0 ? subtotalBeforeTax + (subtotalBeforeTax * (tax_rate || 0) / 100) : 0;
-    if (received > totalWithTax) return res.status(400).json({ error: "Received amount cannot exceed total bill" });
 
     const balance = totalWithTax - received;
 
+    // Timezone Formatting to IST
     const utcDate = new Date(date);
     const istOffset = 5.5 * 60 * 60 * 1000;
     const istDate = new Date(utcDate.getTime() + istOffset);
     date = istDate.toISOString().slice(0, 19).replace("T", " ");
 
+    // JSON Formatting for MySQL Strings
     const serviceTakenFormatted = JSON.stringify(service_taken);
+    const partsTakenFormatted = JSON.stringify(parts_taken);
+    const vehicleDetailsFormatted = vehicle_details ? JSON.stringify(vehicle_details) : null;
 
-    // Get the latest invoiceid for this admin_id
+    // Fetch Unique Sequential Invoice ID per Admin
     const getInvoiceIdQuery = `SELECT MAX(invoiceid) as maxInvoiceId FROM bills WHERE admin_id = ?`;
     db.query(getInvoiceIdQuery, [admin_id], (err, result) => {
       if (err) {
-        console.error("Error fetching invoiceid:", err);
         return res.status(500).json({ error: "Failed to fetch invoiceid" });
       }
 
-      const nextInvoiceId = result[0].maxInvoiceId ? result[0].maxInvoiceId + 1 : 1; // start from 1 if no record exists
+      const nextInvoiceId = result[0].maxInvoiceId ? result[0].maxInvoiceId + 1 : 1;
 
+      // SQL Query updated according to new Alter columns mapping ordered structure
       const insertQuery = `
         INSERT INTO bills 
-          (admin_id, invoiceid, customer_name, contact, service_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_method)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (admin_id, cust_id, invoiceid, customer_name, contact, customer_email, customer_address, vehicle_details, service_taken, parts_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
-        admin_id, 
-        nextInvoiceId, 
-        customer_name, 
-        contact, 
-        serviceTakenFormatted, 
-        other_charges, 
-        discount, 
-        received, 
+        admin_id,
+        custId,
+        nextInvoiceId,
+        customer_name,
+        contact,
+        customer_email || null,
+        customer_address || null,
+        vehicleDetailsFormatted,
+        serviceTakenFormatted,
+        partsTakenFormatted,
+        other_charges,
+        discount,
+        received,
         balance,
-        total_bill, 
+        total_bill,
         date,
         tax_rate,
         payment_method
@@ -77,18 +109,17 @@ export const createBill = async (req, res) => {
 
       db.query(insertQuery, values, (err, result) => {
         if (err) {
-          console.error("DB Insert Error:", err);
           return res.status(500).json({ error: "Database insert failed", details: err });
         }
-        res.status(201).json({ 
-          message: "Bill created successfully", 
+        res.status(201).json({
+          success: true,
+          message: "Bill created successfully",
           bill_id: result.insertId,
           invoiceid: nextInvoiceId
         });
       });
     });
   } catch (error) {
-    console.error("Error creating bill:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -113,107 +144,151 @@ export const getPreviousCustomers = (req, res) => {
 export const updateBill = async (req, res) => {
   try {
     const { bill_id } = req.params;
-    let { admin_id, customer_name, contact, service_taken, other_charges, discount, total_bill, tax_rate, payment_method } = req.body;
+    let { 
+      admin_id, 
+      customer_name, 
+      contact, 
+      customer_email,
+      customer_address,
+      vehicle_details,
+      service_taken, 
+      parts_taken, // Added matching dynamic payload tracking
+      other_charges, 
+      discount, 
+      received,     // Track received amount modification updates
+      total_bill, 
+      tax_rate, 
+      payment_method 
+    } = req.body;
+
+    // Strict Normalization Context Check for Array Objects
+    if (!Array.isArray(service_taken)) service_taken = [];
     
-    // Validation
-    if (!admin_id || !customer_name || !contact || !service_taken || service_taken.length === 0) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Check if parts_taken is coming as a stringified object from frontend and unpack it safely
+    let parsedParts = parts_taken;
+    if (typeof parts_taken === 'string') {
+      parsedParts = tryParseJSON(parts_taken);
     }
-    if (typeof other_charges !== 'number' || other_charges < 0) {
-      return res.status(400).json({ error: "Invalid other charges" });
+    if (!Array.isArray(parsedParts)) parsedParts = [];
+
+    // 1. Core Structural Validation matching production ecosystem 
+    if (!admin_id || !customer_name || !contact || (service_taken.length === 0 && parsedParts.length === 0)) {
+      return res.status(400).json({ error: "Missing required fields. Customer details and items are required." });
     }
-    if (typeof discount !== 'number' || discount < 0) {
-      return res.status(400).json({ error: "Invalid discount" });
-    }
-    if (typeof total_bill !== 'number' || total_bill < 0) {
-      return res.status(400).json({ error: "Invalid total bill" });
-    }
-    if (!['cash', 'e-transfer'].includes(payment_method)) {
-      return res.status(400).json({ error: "Invalid payment method" });
-    }
-    if (!Array.isArray(service_taken)) {
-      return res.status(400).json({ error: "service_taken must be an array" });
+    if (typeof other_charges !== 'number' || other_charges < 0) return res.status(400).json({ error: "Invalid other charges" });
+    if (typeof discount !== 'number' || discount < 0) return res.status(400).json({ error: "Invalid discount" });
+    if (typeof received !== 'number' || received < 0) return res.status(400).json({ error: "Invalid received amount" });
+    if (typeof total_bill !== 'number' || total_bill < 0) return res.status(400).json({ error: "Invalid total bill" });
+    
+    // CRITICAL CORRECTION: Updated allocation to accept 'online' context string instead of 'e-transfer'
+    if (!['cash', 'online'].includes(payment_method)) {
+      return res.status(400).json({ error: "Invalid payment method. Must be cash or online." });
     }
 
-    // Validate discount
+    // 2. Comprehensive Mathematical Operations Cross-checking Matrix
     const serviceTotal = service_taken.reduce((sum, service) => sum + parseFloat(service.price || 0), 0);
-    const subtotalBeforeTax = serviceTotal + other_charges - discount;
+    const partsTotal = parsedParts.reduce((sum, part) => sum + (parseFloat(part.sellingPrice || 0) * (part.qty || 1)), 0);
+
+    const subtotalBeforeTax = serviceTotal + partsTotal + other_charges - discount;
     if (subtotalBeforeTax < 0) {
-      return res.status(400).json({ error: "Discount cannot exceed service total plus other charges" });
+      return res.status(400).json({ error: "Discount cannot exceed items total plus other charges" });
     }
 
-    const serviceTakenFormatted = JSON.stringify(service_taken);
+    const liveTaxRate = parseFloat(tax_rate) || 0;
+    const computedGrandTotal = subtotalBeforeTax > 0 ? subtotalBeforeTax + (subtotalBeforeTax * liveTaxRate / 100) : 0;
+    
+    // Dynamically calculate remaining balance structural values on backend update frame
+    const computedBalance = computedGrandTotal - received;
 
+    // Stringify Complex Entities cleanly to avoid raw Object evaluation issues in MySQL Driver
+    const serviceTakenFormatted = JSON.stringify(service_taken);
+    const partsTakenFormatted = JSON.stringify(parsedParts);
+    const vehicleDetailsFormatted = vehicle_details ? JSON.stringify(vehicle_details) : null;
+
+    // Timezone Processing context check
+    const date = req.body.date ? new Date(req.body.date).toISOString().slice(0, 19).replace('T', ' ') : null;
+
+    // 3. Updated SQL query handling exact structural order transformations
     const query = `
       UPDATE bills 
       SET 
         customer_name = ?, 
         contact = ?, 
+        customer_email = ?,
+        customer_address = ?,
+        vehicle_details = ?,
         service_taken = ?, 
+        parts_taken = ?,
         other_charges = ?, 
         discount = ?,
+        received = ?,
+        balance = ?,
         total_bill = ?,
         tax_rate = ?,
         payment_method = ?,
-        date = COALESCE(?, date)  /* Preserve existing date if not provided */
+        date = COALESCE(?, date)  /* Preserve historical timestamps unless explicit instruction exists */
       WHERE bill_id = ? AND admin_id = ?
     `;
 
-    const date = req.body.date ? new Date(req.body.date).toISOString().slice(0, 19).replace('T', ' ') : null;
-
     const values = [
-      customer_name, 
-      contact, 
-      serviceTakenFormatted, 
-      other_charges, 
-      discount, 
+      customer_name,
+      contact,
+      customer_email || null,
+      customer_address || null,
+      vehicleDetailsFormatted,
+      serviceTakenFormatted,
+      partsTakenFormatted,
+      other_charges,
+      discount,
+      received,
+      computedBalance,
       total_bill,
-      tax_rate || null,  // Store as NULL if not provided
-      payment_method,    // Add payment_method to values
+      tax_rate || null,
+      payment_method,
       date,
-      bill_id, 
+      bill_id,
       admin_id
     ];
 
     db.query(query, values, (err, result) => {
       if (err) {
-        console.error("DB Update Error:", err);
-        return res.status(500).json({ error: "Database update failed", details: err });
+        console.error("Database compilation error:", err);
+        return res.status(500).json({ error: "Database update operations failed", details: err });
       }
       if (result.affectedRows === 0) {
-        return res.status(404).json({ error: "Bill not found or unauthorized" });
+        return res.status(404).json({ error: "Invoice registry entry not found or context token unauthorized" });
       }
-      
-      // Return the updated bill data
-      const getUpdatedBill = `
-        SELECT * FROM bills WHERE bill_id = ?
-      `;
+
+      // Fetch, clean and unpack modified data row instance to send back to React Native views
+      const getUpdatedBill = `SELECT * FROM bills WHERE bill_id = ?`;
       db.query(getUpdatedBill, [bill_id], (err, updatedResults) => {
-        if (err) {
-          console.error("DB Fetch Error:", err);
-          return res.status(200).json({ message: "Bill updated successfully" });
+        if (err || updatedResults.length === 0) {
+          return res.status(200).json({ message: "Bill entry modifications updated securely inside database" });
         }
-        
+
         const updatedBill = updatedResults[0];
         updatedBill.service_taken = tryParseJSON(updatedBill.service_taken);
-        
-        res.status(200).json({ 
-          message: "Bill updated successfully",
-          bill: updatedBill 
+        updatedBill.parts_taken = tryParseJSON(updatedBill.parts_taken);
+        updatedBill.vehicle_details = tryParseJSON(updatedBill.vehicle_details);
+
+        res.status(200).json({
+          success: true,
+          message: "Invoice updated successfully ✅",
+          bill: updatedBill
         });
       });
     });
   } catch (error) {
-    console.error("Error updating bill:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Internal process lifecycle failure exception:", error);
+    res.status(500).json({ error: "Internal Server Error context initialization error" });
   }
 };
+
 export const getWorkHistory = async (req, res) => {
   try {
     const { admin_id } = req.query;
 
-    const query = `
-      SELECT 
+    const query = `SELECT 
         id AS bill_id, 
         customer_name, 
         date, 
@@ -225,11 +300,9 @@ export const getWorkHistory = async (req, res) => {
 
     db.query(query, [admin_id], (err, results) => {
       if (err) {
-        console.error("DB Query Error:", err);
         return res.status(500).json({ error: "Database query failed", details: err });
       }
 
-      console.log("WorkHistory query results:", JSON.stringify(results, null, 2));
       const bills = results.map(bill => ({
         ...bill,
         service_taken: tryParseJSON(bill.service_taken),
@@ -238,10 +311,31 @@ export const getWorkHistory = async (req, res) => {
       res.status(200).json(bills);
     });
   } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getAllBills = async (req, res) => {
+  try {
+    const { admin_id } = req.query;
+
+    const query = `SELECT * FROM bills WHERE admin_id = ?`;
+
+    db.query(query, [admin_id], (err, results) => {
+      console.error("DB Query Error:", err);
+      if (err) {
+        console.error("DB Query Error:", err);
+        return res.status(500).json({ error: "Database query failed", details: err });
+      }
+
+      res.status(200).json(results);
+    });
+  } catch (error) {
     console.error("Error fetching work history:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
 export const updateCustomerDetails = async (req, res) => {
   const { admin_id, old_contact, new_contact, customer_name } = req.body;
 
@@ -251,18 +345,18 @@ export const updateCustomerDetails = async (req, res) => {
     WHERE admin_id = ? AND contact = ?
   `;
 
-  db.query(query, 
+  db.query(query,
     [customer_name, new_contact, admin_id, old_contact],
     (err, result) => {
-      
+
       if (err) {
         console.error("Database error:", err);
         return res.status(500).json({ error: "Database operation failed" });
       }
-      
-      res.json({ 
-        success: true, 
-        updated: result.affectedRows 
+
+      res.json({
+        success: true,
+        updated: result.affectedRows
       });
     }
   );
@@ -304,25 +398,7 @@ export const getBillById = async (req, res) => {
   try {
     const { bill_id } = req.params;
 
-    const query = `
-  SELECT 
-    bill_id, 
-    admin_id, 
-    invoiceid,
-    customer_name, 
-    contact, 
-    service_taken, 
-    other_charges, 
-    discount, 
-    received,
-    balance,
-    total_bill, 
-    date, 
-    tax_rate,
-    payment_method
-  FROM bills 
-  WHERE bill_id = ?
-`;
+    const query = `SELECT * FROM bills WHERE bill_id = ?`;
     db.query(query, [bill_id], (err, results) => {
       if (err) {
         console.error("DB Query Error:", err);
@@ -335,7 +411,7 @@ export const getBillById = async (req, res) => {
 
       const bill = results[0];
       bill.service_taken = tryParseJSON(bill.service_taken);
-      
+
       if (bill.date) {
         bill.date = new Date(bill.date).toISOString();
       }
@@ -373,8 +449,6 @@ export const updatePayment = async (req, res) => {
 
     const values = [received, balance, bill_id, admin_id];
 
-    console.log("Updating payment with values:", values);
-
     db.query(query, values, (err, result) => {
       if (err) {
         console.error("DB Update Error:", err);
@@ -394,7 +468,7 @@ export const updatePayment = async (req, res) => {
         if (fetchErr) {
           console.error("DB Fetch Error:", fetchErr);
         } else {
-          console.log("Updated bill values:", fetchResult[0]);
+          console.error("Updated bill values:", fetchResult[0]);
         }
       });
 
@@ -430,10 +504,10 @@ export const getPendingBalances = (req, res) => {
   db.query(query, [admin_id], (err, results) => {
     if (err) {
       console.error("DB Query Error:", err.message);
-      return res.status(500).json({ 
-        success: false, 
-        error: "Database query failed", 
-        details: err.message 
+      return res.status(500).json({
+        success: false,
+        error: "Database query failed",
+        details: err.message
       });
     }
 

@@ -12,9 +12,14 @@ import workHistoryRoutes from "./routes/workHistoryRoutes.js";
 import exportImportRoutes from "./routes/exportImportRoutes.js";
 import expenseRoutes from "./routes/expenseRoutes.js";
 import profitRoutes from "./routes/profitRoutes.js";
+import customerRoutes from "./routes/customerRoutes.js";
+import partRoutes from './routes/partRoutes.js';
+import vehicleRoutes from './routes/vehicleRoutes.js';
 
 dotenv.config();
 const app = express();
+
+app.use(express.json());
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -33,6 +38,9 @@ app.use("/api/work-history", workHistoryRoutes);
 app.use('/api', exportImportRoutes);
 app.use('/api', expenseRoutes);
 app.use('/api/profit', profitRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/parts', partRoutes);
+app.use('/api/vehicles', vehicleRoutes);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

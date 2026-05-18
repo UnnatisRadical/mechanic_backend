@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { registerAdmin, loginAdmin, getAdminById, updateAdmin, changeAdminPassword, getAdminSettings, updateAdminSettings } from "../controllers/adminController.js";
+import {
+  registerAdmin, loginAdmin, getAdminById, updateAdmin, changeAdminPassword, getAdminSettings, updateAdminSettings, googleSignIn
+} from "../controllers/adminController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 
 
@@ -7,6 +9,7 @@ const router = Router();
 
 router.post("/register", registerAdmin);
 router.post("/login", loginAdmin);
+router.post("/google-signin", googleSignIn);
 router.get("/protected", verifyToken, (req, res) => {
   res.json({ message: "Access granted", admin: req.admin });
 });

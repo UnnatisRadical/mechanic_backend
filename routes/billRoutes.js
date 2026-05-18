@@ -10,14 +10,16 @@ import {
   // updatePayment,
   getPendingBalances,
   updatePayment,
+  getAllBills,
 
 } from "../controllers/billController.js";
 
 const router = express.Router();
 
-router.post("/", createBill);
+router.post("/create", createBill);
 router.get("/active-services/:admin_id", getActiveServices);
 router.get("/previous-customers/:admin_id", getPreviousCustomers);
+router.get("/all-bills", getAllBills);
 router.put("/:bill_id", updateBill);
 router.put("/customer/update", updateCustomerDetails);
 router.delete("/:id", deleteBill);

@@ -2,15 +2,16 @@ import db from "../db/db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import { OAuth2Client } from 'google-auth-library';
 
 dotenv.config();
 
-// ✅ Register Admin
+const googleClient = new OAuth2Client(process.env.GOOGLE_WEB_CLIENT_ID);
+
 export const registerAdmin = async (req, res) => {
   const { shop_name, email, contact, country, currency, password } = req.body;
 
   try {
-    // Check if email already exists
     const existingAdmin = await new Promise((resolve, reject) => {
       db.query(
         "SELECT * FROM admins WHERE email = ?",
@@ -26,10 +27,8 @@ export const registerAdmin = async (req, res) => {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert into database
     db.query(
       "INSERT INTO admins (shop_name, email, contact, country, currency, password) VALUES (?, ?, ?, ?, ?, ?)",
       [shop_name, email, contact, country, currency || "", hashedPassword],
@@ -46,11 +45,9 @@ export const registerAdmin = async (req, res) => {
   }
 };
 
-// ✅ Login Admin
 export const loginAdmin = (req, res) => {
   const { email, password } = req.body;
 
-  // Add validation for empty fields
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
   }
@@ -65,7 +62,6 @@ export const loginAdmin = (req, res) => {
       }
 
       if (results.length === 0) {
-        console.log("No admin found with email:", email);
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
@@ -107,7 +103,71 @@ export const loginAdmin = (req, res) => {
     },
   );
 };
-// ✅ Get Admin Details by ID
+
+export const googleSignIn = async (req, res) => {
+  const { idToken, shop_name, contact } = req.body;
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_WEB_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const { email, given_name: firstName, family_name: lastName, picture: profile_url } = payload;
+
+    db.query("SELECT * FROM admins WHERE email = ?", [email], (err, results) => {
+      if (err) return res.status(500).json({ message: "Database error" });
+
+      if (results.length > 0) {
+        const admin = results[0];
+
+        db.query("UPDATE admins SET profile_url = ? WHERE id = ?", [profile_url, admin.id]);
+
+        const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, { expiresIn: "24h" });
+
+        return res.json({
+          success: true,
+          isNewUser: false,
+          token,
+          admin: { ...admin, profile_url }
+        });
+
+      } else {
+        if (shop_name && contact) {
+          db.query(
+            "INSERT INTO admins (shop_name, firstName, lastName, email, contact, profile_url, currency) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [shop_name, firstName, lastName, email, contact, profile_url, "USD"],
+            (insertErr, insertResult) => {
+              if (insertErr) return res.status(500).json({ message: insertErr.message });
+
+              db.query("SELECT * FROM admins WHERE id = ?", [insertResult.insertId], (fetchErr, newAdmin) => {
+                const adminData = newAdmin[0];
+                const token = jwt.sign({ id: adminData.id }, process.env.SECRET_KEY, { expiresIn: "24h" });
+
+                return res.json({
+                  success: true,
+                  isNewUser: false,
+                  token,
+                  admin: adminData
+                });
+              });
+            }
+          );
+        } else {
+          return res.json({
+            success: true,
+            isNewUser: true,
+            userData: { email, firstName, lastName, profile_url }
+          });
+        }
+      }
+    });
+  } catch (error) {
+    res.status(401).json({ message: "Invalid Google Token" });
+  }
+};
+
 export const getAdminById = (req, res) => {
   const adminId = req.params.id;
 
@@ -124,11 +184,9 @@ export const getAdminById = (req, res) => {
   );
 };
 
-// ✅ Update Admin Details
 export const updateAdmin = async (req, res) => {
   const adminId = req.params.id;
   const { shop_name, firstName, lastName, email, contact, country } = req.body;
-  console.log("Updating admin details for ID:", req.body);
 
   try {
     const emailCheck = await new Promise((resolve, reject) => {
@@ -136,7 +194,6 @@ export const updateAdmin = async (req, res) => {
         "SELECT * FROM admins WHERE email = ? AND id != ?",
         [email, adminId],
         (err, results) => {
-          console.log("Email check results:", results);
           if (err) reject(err);
           resolve(results);
         },
@@ -151,7 +208,6 @@ export const updateAdmin = async (req, res) => {
       "UPDATE admins SET shop_name = ?, firstName = ?, lastName = ?, email = ?, contact = ?, country = ? WHERE id = ?",
       [shop_name, firstName, lastName, email, contact, country, adminId],
       (err, result) => {
-        console.log("err:", err);
         if (err) return res.status(500).json({ message: err.message });
         if (result.affectedRows === 0)
           return res.status(404).json({ message: "Admin not found" });
@@ -160,21 +216,18 @@ export const updateAdmin = async (req, res) => {
       },
     );
   } catch (error) {
-    console.log("Error updating admin:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// ✅ Change Admin Password
 export const changeAdminPassword = async (req, res) => {
   const adminId = req.params.id;
-  const { currentPassword, newPassword } = req.body;
+  const { newPassword } = req.body;
 
   try {
-    // Get current admin data
     const admin = await new Promise((resolve, reject) => {
       db.query(
-        "SELECT * FROM admins WHERE id = ?",
+        "SELECT id FROM admins WHERE id = ?",
         [adminId],
         (err, results) => {
           if (err) reject(err);
@@ -187,24 +240,14 @@ export const changeAdminPassword = async (req, res) => {
       return res.status(404).json({ message: "Admin not found" });
     }
 
-    // Verify current password
-    const isValidPassword = await bcrypt.compare(
-      currentPassword,
-      admin.password,
-    );
-    if (!isValidPassword) {
-      return res.status(401).json({ message: "Current password is incorrect" });
-    }
-
-    // Hash new password
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
     db.query(
       "UPDATE admins SET password = ? WHERE id = ?",
       [hashedNewPassword, adminId],
       (err, result) => {
         if (err) return res.status(500).json({ message: err.message });
+        
         if (result.affectedRows === 0)
           return res.status(404).json({ message: "Admin not found" });
 
@@ -212,11 +255,11 @@ export const changeAdminPassword = async (req, res) => {
       },
     );
   } catch (error) {
+    console.error("Password Update Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// ✅ Get Admin Settings
 export const getAdminSettings = async (req, res) => {
   try {
     const adminId = req.params.id;
