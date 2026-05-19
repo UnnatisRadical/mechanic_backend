@@ -39,7 +39,6 @@ export const addExpense = (req, res) => {
     [adminId, expenseName],
     (checkError, checkResult) => {
       if (checkError) {
-        console.error("Error checking expense name:", checkError);
         return res.status(500).json({ 
           success: false, 
           message: "Failed to verify expense name" 
@@ -61,7 +60,6 @@ export const addExpense = (req, res) => {
         [adminId, payeeName, expenseName, parseFloat(amount), paymentMethod, status, description, date || new Date().toISOString()],
         (error, result) => {
           if (error) {
-            console.error("Expense save error:", error);
             return res.status(500).json({ 
               success: false, 
               message: "Failed to save expense" 
@@ -73,7 +71,6 @@ export const addExpense = (req, res) => {
             [result.insertId],
             (selectError, selectResult) => {
               if (selectError || selectResult.length === 0) {
-                console.error("Error fetching new expense:", selectError);
                 return res.status(500).json({ 
                   success: false, 
                   message: "Expense saved but failed to retrieve details" 
@@ -119,7 +116,6 @@ export const getExpenses = (req, res) => {
     params,
     (error, results) => {
       if (error) {
-        console.error("Database error:", error);
         return res.status(500).json({ 
           success: false, 
           message: "Failed to fetch expenses" 
@@ -173,7 +169,6 @@ export const updateExpense = (req, res) => {
     [expenseName, id],
     (error, result) => {
       if (error) {
-        console.error("Expense update error:", error);
         return res.status(500).json({ 
           success: false, 
           message: `Failed to update expense: ${error.message}` 
@@ -209,7 +204,6 @@ export const deleteExpense = (req, res) => {
     [id],
     (error, result) => {
       if (error) {
-        console.error("Error deleting expense:", error);
         return res.status(500).json({
           success: false,
           message: "Failed to delete expense"

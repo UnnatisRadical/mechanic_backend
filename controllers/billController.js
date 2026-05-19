@@ -252,7 +252,6 @@ export const updateBill = async (req, res) => {
 
     db.query(query, values, (err, result) => {
       if (err) {
-        console.error("Database compilation error:", err);
         return res.status(500).json({ error: "Database update operations failed", details: err });
       }
       if (result.affectedRows === 0) {
@@ -279,7 +278,6 @@ export const updateBill = async (req, res) => {
       });
     });
   } catch (error) {
-    console.error("Internal process lifecycle failure exception:", error);
     res.status(500).json({ error: "Internal Server Error context initialization error" });
   }
 };
@@ -322,16 +320,13 @@ export const getAllBills = async (req, res) => {
     const query = `SELECT * FROM bills WHERE admin_id = ?`;
 
     db.query(query, [admin_id], (err, results) => {
-      console.error("DB Query Error:", err);
       if (err) {
-        console.error("DB Query Error:", err);
         return res.status(500).json({ error: "Database query failed", details: err });
       }
 
       res.status(200).json(results);
     });
   } catch (error) {
-    console.error("Error fetching work history:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -350,7 +345,6 @@ export const updateCustomerDetails = async (req, res) => {
     (err, result) => {
 
       if (err) {
-        console.error("Database error:", err);
         return res.status(500).json({ error: "Database operation failed" });
       }
 
@@ -378,7 +372,6 @@ export const deleteBill = async (req, res) => {
 
     db.query(query, [id, admin_id], (err, result) => {
       if (err) {
-        console.error("Database error:", err);
         return res.status(500).json({ error: "Database operation failed" });
       }
 
@@ -389,7 +382,6 @@ export const deleteBill = async (req, res) => {
       res.json({ message: "Bill deleted successfully" });
     });
   } catch (error) {
-    console.error("Server error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -401,7 +393,6 @@ export const getBillById = async (req, res) => {
     const query = `SELECT * FROM bills WHERE bill_id = ?`;
     db.query(query, [bill_id], (err, results) => {
       if (err) {
-        console.error("DB Query Error:", err);
         return res.status(500).json({ error: "Database query failed", details: err });
       }
 
@@ -419,7 +410,6 @@ export const getBillById = async (req, res) => {
       res.status(200).json(bill);
     });
   } catch (error) {
-    console.error("Error fetching bill:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -451,7 +441,6 @@ export const updatePayment = async (req, res) => {
 
     db.query(query, values, (err, result) => {
       if (err) {
-        console.error("DB Update Error:", err);
         return res.status(500).json({ error: "Database update failed", details: err });
       }
 
@@ -465,17 +454,11 @@ export const updatePayment = async (req, res) => {
         WHERE bill_id = ? AND admin_id = ?
       `;
       db.query(fetchQuery, [bill_id, admin_id], (fetchErr, fetchResult) => {
-        if (fetchErr) {
-          console.error("DB Fetch Error:", fetchErr);
-        } else {
-          console.error("Updated bill values:", fetchResult[0]);
-        }
       });
 
       res.status(200).json({ message: "Payment updated successfully" });
     });
   } catch (error) {
-    console.error("Error updating payment:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -484,7 +467,6 @@ export const getPendingBalances = (req, res) => {
   const { admin_id } = req.params;
 
   if (!admin_id) {
-    console.error("Admin ID missing in request");
     return res.status(400).json({ success: false, error: "Admin ID is required" });
   }
 
@@ -503,7 +485,6 @@ export const getPendingBalances = (req, res) => {
 
   db.query(query, [admin_id], (err, results) => {
     if (err) {
-      console.error("DB Query Error:", err.message);
       return res.status(500).json({
         success: false,
         error: "Database query failed",

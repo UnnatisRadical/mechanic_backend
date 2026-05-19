@@ -24,7 +24,6 @@ export const addSparePart = async (req, res) => {
 
         db.query(sql, values, (err, result) => {
             if (err) {
-                console.error("DB Error:", err);
                 return res
                     .status(500)
                     .json({ success: false, error: "Database error occurred" });
@@ -61,7 +60,6 @@ export const getParts = async (req, res) => {
 
         db.query(sql, [adminId], (err, results) => {
             if (err) {
-                console.error("Fetch Error:", err);
                 return res.status(500).json({ success: false, message: "Database error" });
             }
             res.status(200).json({ success: true, data: results });

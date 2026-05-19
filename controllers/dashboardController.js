@@ -20,6 +20,27 @@ export const getDashboardData = async (req, res) => {
       [admin_id]
     );
 
+    const [yesterday] = await connection.query(
+      `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? 
+   AND date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) 
+   AND date < CURDATE()`,
+      [admin_id]
+    );
+    const [week] = await connection.query(
+      `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? AND YEARWEEK(date, 1) = YEARWEEK(CURDATE(), 1)`,
+      [admin_id]
+    );
+
+    const [month] = await connection.query(
+      `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? AND YEAR(date) = YEAR(CURDATE()) AND MONTH(date) = MONTH(CURDATE())`,
+      [admin_id]
+    );
+
+    const [year] = await connection.query(
+      `SELECT COALESCE(SUM(total_bill), 0) as total FROM bills WHERE admin_id = ? AND YEAR(date) = YEAR(CURDATE())`,
+      [admin_id]
+    );
+
     const [pending] = await connection.query(
       `SELECT COALESCE(SUM(balance), 0) as total_pending FROM bills WHERE admin_id = ?`,
       [admin_id]
@@ -36,12 +57,16 @@ export const getDashboardData = async (req, res) => {
     );
 
     const [invoiceResult] = await connection.query(
-      "SELECT COUNT(*) as count FROM bills WHERE admin_id = ?", 
+      "SELECT COUNT(*) as count FROM bills WHERE admin_id = ?",
       [admin_id]
     );
 
     res.json({
       todayEarnings: parseFloat(today[0].total),
+      yesterdayEarnings: parseFloat(yesterday[0].total),
+      weekEarnings: parseFloat(week[0].total),
+      monthEarnings: parseFloat(month[0].total),
+      yearEarnings: parseFloat(year[0].total),
       totalEarnings: parseFloat(total[0].total),
       pendingPayments: parseFloat(pending[0].total_pending),
       rawServices,

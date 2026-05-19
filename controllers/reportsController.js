@@ -24,9 +24,13 @@ export const getCustomerBills = async (req, res) => {
       SELECT 
         bill_id, 
         customer_name, 
-        contact, 
-        service_taken, 
-        other_charges, 
+        contact,
+        customer_email,
+        customer_address,
+        service_taken,
+        parts_taken,
+        other_charges,
+        vehicle_details,
         COALESCE(CAST(discount AS DECIMAL(10,2)), 0) as discount,
         total_bill, 
         date,
@@ -39,13 +43,16 @@ export const getCustomerBills = async (req, res) => {
 
     db.query(query, [admin_id, contact], (err, results) => {
       if (err) {
-        console.error("Database error in getCustomerBills:", err);
         return res.status(500).json({ error: "Database operation failed", details: err.message });
       }
 
       const processedResults = results.map(bill => ({
         ...bill,
+        customer_email: bill?.customer_email,
+        customer_address: bill?.customer_address,
         service_taken: tryParseJSON(bill.service_taken),
+        vehicle_details: tryParseJSON(bill.vehicle_details),
+        parts_taken: tryParseJSON(bill.parts_taken),
         other_charges: parseFloat(bill.other_charges) || 0,
         discount: parseFloat(bill.discount) || 0,
         total_bill: parseFloat(bill.total_bill) || 0,
@@ -60,7 +67,6 @@ export const getCustomerBills = async (req, res) => {
       });
     });
   } catch (error) {
-    console.error("Server error in getCustomerBills:", error);
     res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 };
@@ -92,7 +98,6 @@ export const getReports = async (req, res) => {
 
     db.query(query, [admin_id], (err, results) => {
       if (err) {
-        console.error("Database error in getReports:", err);
         return res.status(500).json({ error: "Database operation failed", details: err.message });
       }
 
@@ -111,7 +116,6 @@ export const getReports = async (req, res) => {
       res.json(formattedResults);
     });
   } catch (error) {
-    console.error("Server error in getReports:", error);
     res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 };
@@ -141,7 +145,6 @@ export const getWorkHistory = async (req, res) => {
 
     db.query(query, [admin_id], (err, results) => {
       if (err) {
-        console.error("Database error:", err);
         return res.status(500).json({ error: "Database operation failed" });
       }
 
@@ -159,7 +162,6 @@ export const getWorkHistory = async (req, res) => {
       res.json(formattedResults);
     });
   } catch (error) {
-    console.error("Server error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

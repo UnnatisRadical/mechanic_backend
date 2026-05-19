@@ -57,7 +57,6 @@ export const loginAdmin = (req, res) => {
     [email],
     async (err, results) => {
       if (err) {
-        console.error("Database error:", err);
         return res.status(500).json({ message: "Database error" });
       }
 
@@ -73,7 +72,6 @@ export const loginAdmin = (req, res) => {
           return res.status(401).json({ message: "Invalid email or password" });
         }
         if (!process.env.SECRET_KEY) {
-          console.error("JWT Secret Key is missing");
           return res
             .status(500)
             .json({ message: "Server configuration error" });
@@ -97,7 +95,6 @@ export const loginAdmin = (req, res) => {
           },
         });
       } catch (error) {
-        console.error("Login error:", error);
         res.status(500).json({ message: "Server error during login" });
       }
     },
@@ -255,7 +252,6 @@ export const changeAdminPassword = async (req, res) => {
       },
     );
   } catch (error) {
-    console.error("Password Update Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -16,7 +16,6 @@ function tryParseJSON(jsonString) {
     if (Array.isArray(jsonString)) return jsonString;
     return jsonString ? [jsonString] : [];
   } catch (e) {
-    console.error("JSON parse error:", e);
     return [];
   }
 }
@@ -69,7 +68,6 @@ export const exportBills = async (req, res) => {
 
     db.query(query, params, (err, results) => {
       if (err) {
-        console.error("Database error in exportBills:", err);
         return res.status(500).json({ 
           success: false,
           error: "Database operation failed", 
@@ -135,7 +133,6 @@ export const exportBills = async (req, res) => {
       res.send(buffer);
     });
   } catch (error) {
-    console.error("Server error in exportBills:", error);
     res.status(500).json({ 
       success: false,
       error: "Internal Server Error", 

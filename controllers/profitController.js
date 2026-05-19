@@ -26,7 +26,6 @@ const calculateProfit = (req, res) => {
     [adminId, startOfStartDateLocal, endOfEndDateLocal],
     (error, expenseResults) => {
       if (error) {
-        console.error("Error fetching expenses:", error);
         return res.status(500).json({ 
           success: false, 
           message: "Failed to fetch expenses" 
@@ -48,7 +47,6 @@ const calculateProfit = (req, res) => {
         [adminId, startOfStartDateIST, endOfEndDateIST],
         (billError, billResults) => {
           if (billError) {
-            console.error("Error fetching bills:", billError);
             return res.status(500).json({ 
               success: false, 
               message: "Failed to fetch bills" 
@@ -101,7 +99,6 @@ const getFinanceSummary = (req, res) => {
     [adminId, startOfStartDateLocal, endOfEndDateLocal],
     (error, expenseResults) => {
       if (error) {
-        console.error("Error fetching expenses:", error);
         return res.status(500).json({ 
           success: false, 
           message: "Failed to fetch expenses" 
@@ -120,7 +117,6 @@ const getFinanceSummary = (req, res) => {
         [adminId, startOfStartDateIST, endOfEndDateIST],
         (billError, billResults) => {
           if (billError) {
-            console.error("Error fetching bills:", billError);
             return res.status(500).json({ 
               success: false, 
               message: "Failed to fetch bills" 
@@ -143,7 +139,6 @@ const getFinanceSummary = (req, res) => {
             [adminId, startOfStartDateLocal, endOfEndDateLocal],
             (detailExpenseError, expenseDetails) => {
               if (detailExpenseError) {
-                console.error("Error fetching detailed expenses:", detailExpenseError);
                 return res.status(500).json({ 
                   success: false, 
                   message: "Failed to fetch detailed expenses" 
@@ -164,7 +159,6 @@ const getFinanceSummary = (req, res) => {
                 [adminId, startOfStartDateIST, endOfEndDateIST],
                 (detailBillError, incomeDetails) => {
                   if (detailBillError) {
-                    console.error("Error fetching detailed bills:", detailBillError);
                     return res.status(500).json({ 
                       success: false, 
                       message: "Failed to fetch detailed bills" 

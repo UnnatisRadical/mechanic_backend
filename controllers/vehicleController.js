@@ -40,7 +40,6 @@ export const registerVehicle = async (req, res) => {
                 if (err.code === 'ER_DUP_ENTRY') {
                     return res.status(400).json({ success: false, message: "Vehicle number already exists" });
                 }
-                console.error("DB Error:", err);
                 return res.status(500).json({ success: false, message: "Database error occurred" });
             }
             res.status(201).json({
@@ -112,7 +111,6 @@ export const updateVehicle = async (req, res) => {
                 if (err.code === 'ER_DUP_ENTRY') {
                     return res.status(400).json({ success: false, message: "Vehicle number already exists" });
                 }
-                console.error("Update Error:", err);
                 return res.status(500).json({ success: false, message: "Database error" });
             }
 

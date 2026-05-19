@@ -38,7 +38,6 @@ export const getWorkHistory = async (req, res) => {
 
     db.query(query, [admin_id], (err, results) => {
       if (err) {
-        console.error("Database error:", err);
         return res.status(500).json({ error: "Database operation failed" });
       }
 
@@ -56,7 +55,6 @@ export const getWorkHistory = async (req, res) => {
       res.json(formattedResults);
     });
   } catch (error) {
-    console.error("Server error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

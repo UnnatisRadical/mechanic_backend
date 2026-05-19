@@ -23,7 +23,6 @@ export const getTaxDetails = (req, res) => {
     [adminId], 
     (error, results) => {
       if (error) {
-        console.error("Database error:", error);
         return res.status(500).json({ 
           success: false, 
           message: "Database operation failed" 
@@ -79,7 +78,6 @@ export const saveTaxDetails = (req, res) => {
     [adminId],
     (deleteError, deleteResults) => {
       if (deleteError) {
-        console.error("Error deleting existing tax details:", deleteError);
         return res.status(500).json({ 
           success: false, 
           message: "Failed to clear existing tax details" 
@@ -101,7 +99,6 @@ export const saveTaxDetails = (req, res) => {
         ],
         (insertError, insertResult) => {
           if (insertError) {
-            console.error("Tax details save error:", insertError);
             return res.status(500).json({ 
               success: false, 
               message: "Failed to save tax details" 

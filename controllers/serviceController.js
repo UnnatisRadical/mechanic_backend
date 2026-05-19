@@ -132,7 +132,6 @@ export const editService = (req, res) => {
     [name, price, id, admin_id],
     (error, results) => {
       if (error) {
-        console.error('Database error:', error);
         return res.status(500).json({
           success: false,
           message: 'Database operation failed'
@@ -152,7 +151,6 @@ export const editService = (req, res) => {
         [id],
         (error, serviceResults) => {
           if (error) {
-            console.error('Database error:', error);
             return res.status(500).json({
               success: false,
               message: 'Failed to fetch updated service'

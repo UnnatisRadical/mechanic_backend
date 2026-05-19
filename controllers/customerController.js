@@ -61,7 +61,6 @@ export const getCustomers = async (req, res) => {
 
     db.query(query, [admin_id], (err, results) => {
         if (err) {
-            console.error("Fetch Error:", err);
             return res.status(500).json({ success: false, message: "Error fetching customers" });
         }
 
