@@ -42,5 +42,5 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/parts', partRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 9000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
