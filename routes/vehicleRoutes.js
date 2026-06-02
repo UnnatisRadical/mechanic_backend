@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.post('/register-vehicle', registerVehicle);
 router.get('/get-vehicles/:adminId', getVehicles);
+router.get('/get-all-vehicles/:adminId', getVehicles);
 router.put('/update-vehicle/:id', updateVehicle);
 
 export default router;

@@ -1,5 +1,7 @@
 import express from "express";
-import { addService, getServicesByAdmin, removeService, restoreService, getDeletedServicesByAdmin, editService } from "../controllers/serviceController.js";
+import {
+    addService, getServicesByAdmin, removeService, restoreService, getDeletedServicesByAdmin, editService
+} from "../controllers/serviceController.js";
 
 const router = express.Router();
 
@@ -8,5 +10,5 @@ router.get("/view/:admin_id", getServicesByAdmin);
 router.post("/remove", removeService);
 router.post("/restore", restoreService); 
 router.get("/deleted/:admin_id", getDeletedServicesByAdmin); 
-router.post("/edit", editService);
+router.put("/edit", editService);
 export default router;

@@ -2,32 +2,47 @@ import db from "../db/db.js";
 
 export const addSparePart = async (req, res) => {
     try {
-        const { name, costPrice, sellingPrice, stockQuantity, lowStockThreshold, adminId } = req.body;
+        const {
+            adminId, name, sku, categoryName, brand, description, costPrice, sellingPrice, mrp, stockQuantity, lowStockThreshold, location,
+            unit, supplierName, status
+        } = req.body;
 
-        if (!name || !sellingPrice || !stockQuantity || !adminId) {
+        if (!adminId || !name || !sku || !categoryName || !categoryName.trim() || !stockQuantity || !costPrice) {
             return res.status(400).json({
                 success: false,
-                message: "Mandatory fields (Name, Selling Price, Quantity) are missing",
+                message: "Required fields (Name, SKU, Category Name, Quantity, Unit Price) are missing or invalid",
             });
         }
 
-        const sql = `INSERT INTO spare_parts (admin_id, name, cost_price, selling_price, stock_quantity, low_stock_threshold)VALUES (?, ?, ?, ?, ?, ?)`;
+        const sql = `INSERT INTO spare_parts (
+            admin_id, name, sku, category_name, brand, description, cost_price, selling_price, mrp, stock_quantity, low_stock_threshold, location, unit, supplier_name, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const values = [
             adminId,
             name,
-            parseFloat(costPrice) || 0,
-            parseFloat(sellingPrice),
-            parseInt(stockQuantity),
-            parseInt(lowStockThreshold) || 5,
+            sku,
+            categoryName.trim(),
+            brand || null,
+            description || null,
+            parseFloat(costPrice) || 0.00,
+            parseFloat(sellingPrice) || 0.00,
+            mrp ? parseFloat(mrp) : null,
+            parseInt(stockQuantity) || 0,
+            lowStockThreshold !== undefined ? parseInt(lowStockThreshold) : 5,
+            location || null,
+            unit || 'Pcs',
+            supplierName ? supplierName : null,
+            status || 'active'
         ];
 
         db.query(sql, values, (err, result) => {
             if (err) {
                 return res
                     .status(500)
-                    .json({ success: false, error: "Database error occurred" });
+                    .json({ success: false, error: "Database error occurred", details: err.message });
             }
+            
             res.status(201).json({
                 success: true,
                 message: "Spare part added successfully",
@@ -47,16 +62,7 @@ export const getParts = async (req, res) => {
             return res.status(400).json({ success: false, message: "Admin ID is required" });
         }
 
-        const sql = `SELECT 
-                        id, 
-                        name, 
-                        cost_price AS costPrice, 
-                        selling_price AS sellingPrice, 
-                        stock_quantity AS stock, 
-                        low_stock_threshold AS threshold 
-                     FROM spare_parts 
-                     WHERE admin_id = ? 
-                     ORDER BY created_at DESC`;
+        const sql = `SELECT * FROM spare_parts  WHERE admin_id = ? ORDER BY created_at DESC`;
 
         db.query(sql, [adminId], (err, results) => {
             if (err) {
@@ -73,45 +79,50 @@ export const updateSparePart = async (req, res) => {
     try {
         const { id } = req.params;
         const { 
-            name, 
-            costPrice, 
-            sellingPrice, 
-            stockQuantity, 
-            lowStockThreshold, 
-            adminId
+            adminId, name, sku, categoryName, brand, description, stockQuantity, costPrice, sellingPrice, mrp, lowStockThreshold, location, unit, supplierName, status
         } = req.body;
 
         if (!adminId) {
             return res.status(400).json({ success: false, message: "Admin authentication failed" });
         }
 
-        const sql = `UPDATE spare_parts 
-                     SET name = ?, 
-                         cost_price = ?, 
-                         selling_price = ?, 
-                         stock_quantity = ?, 
-                         low_stock_threshold = ? 
-                     WHERE id = ? AND admin_id = ?`;
+        if (!name || !sku || !categoryName || stockQuantity === undefined || !costPrice) {
+            return res.status(400).json({
+                success: false,
+                message: "Required fields (Name, SKU, Category, Quantity, Cost Price) are missing",
+            });
+        }
+
+        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, stock_quantity = ?, cost_price = ?, selling_price = ?, mrp = ?, low_stock_threshold = ?, location = ?, unit = ?, supplier_name = ?, status = ? WHERE id = ? AND admin_id = ?`;
 
         const values = [
             name,
-            parseFloat(costPrice) || 0,
-            parseFloat(sellingPrice),
-            parseInt(stockQuantity),
-            parseInt(lowStockThreshold) || 5,
+            sku,
+            categoryName,
+            brand || null,
+            description || null,
+            parseInt(stockQuantity) || 0,
+            parseFloat(costPrice) || 0.00,
+            parseFloat(sellingPrice) || 0.00,
+            mrp ? parseFloat(mrp) : null,
+            lowStockThreshold !== undefined ? parseInt(lowStockThreshold) : 5,
+            location || null,
+            unit || 'Pcs',
+            supplierName ? supplierName : null,
+            status ? status.toLowerCase() : 'active',
             id,
             adminId
         ];
 
         db.query(sql, values, (err, result) => {
             if (err) {
-                return res.status(500).json({ success: false, message: "Database error" });
+                return res.status(500).json({ success: false, error: "Database error occurred", details: err.message });
             }
 
             if (result.affectedRows === 0) {
                 return res.status(403).json({ 
                     success: false, 
-                    message: "Unauthorized: You don't have permission to update this part" 
+                    message: "Unauthorized: You don't have permission to update this part or part not found" 
                 });
             }
 

@@ -1,14 +1,13 @@
-import db from "../db/db.js"; // MySQL connection
+import db from "../db/db.js";
 
 export const addService = async (req, res) => {
   try {
-    const { name, price, admin_id } = req.body;
+    const { name, category, description, duration, price, status, admin_id } = req.body;
 
-    if (!name || !price || !admin_id) {
-      return res.status(400).json({ error: "All fields are required" });
+    if (!name || !category || !duration || !price || !status || !admin_id) {
+      return res.status(400).json({ error: "All required fields must be filled" });
     }
 
-    // Check if the service already exists for the same admin
     const checkQuery = "SELECT * FROM services WHERE name = ? AND admin_id = ? AND status = 'active'";
     db.query(checkQuery, [name, admin_id], (err, results) => {
       if (err) {
@@ -18,9 +17,11 @@ export const addService = async (req, res) => {
         return res.status(400).json({ error: "Service already exists" });
       }
 
-      // Insert new service if it does not exist
-      const insertQuery = "INSERT INTO services (name, price, admin_id, status) VALUES (?, ?, ?, 'active')";
-      db.query(insertQuery, [name, price, admin_id], (err, result) => {
+      const insertQuery = `INSERT INTO services (name, category, description, duration, price, status, admin_id)VALUES (?, ?, ?, ?, ?, ?, ?)`;
+
+      const dbStatus = status.toLowerCase();
+
+      db.query(insertQuery, [name, category, description || null, duration, price, dbStatus, admin_id], (err, result) => {
         if (err) {
           return res.status(500).json({ error: "Database error", details: err });
         }
@@ -40,7 +41,7 @@ export const getServicesByAdmin = async (req, res) => {
       return res.status(400).json({ error: "Admin ID is required" });
     }
 
-    const query = "SELECT * FROM services WHERE admin_id = ? AND status = 'active'";
+    const query = "SELECT * FROM services WHERE admin_id = ?";
     db.query(query, [admin_id], (err, results) => {
       if (err) {
         return res.status(500).json({ error: "Database error", details: err });
@@ -92,8 +93,6 @@ export const getDeletedServicesByAdmin = async (req, res) => {
   }
 };
 
-
-
 export const restoreService = async (req, res) => {
   try {
     const { service_id } = req.body;
@@ -116,54 +115,33 @@ export const restoreService = async (req, res) => {
 
 
 export const editService = (req, res) => {
-  const { id, name, price, admin_id } = req.body;
+  const { id, name, price, category, description, duration, status, admin_id } = req.body;
 
-  // Validate input
-  if (!id || !name || price === undefined || !admin_id) {
-    return res.status(400).json({ 
-      success: false,
-      message: 'Missing required fields' 
-    });
-  }
+  try {
+    if (!id || !name || price === undefined || !admin_id) {
+      return res.status(400).json({ success: false, message: 'Missing required fields (id, name, price, or admin_id)' });
+    }
 
-  // Execute the query with callback
-  db.query(
-    `UPDATE services SET name = ?, price = ? WHERE id = ? AND admin_id = ?`,
-    [name, price, id, admin_id],
-    (error, results) => {
+    const queryText = `
+    UPDATE services SET name = ?, price = ?, category = ?, description = ?, duration = ?, status = ? WHERE id = ? AND admin_id = ?
+  `;
+
+    const queryValues = [name, price, category, description, duration, status, id, admin_id];
+
+    db.query(queryText, queryValues, (error, results) => {
       if (error) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database operation failed'
-        });
+        console.error("Database Error:", error);
+        return res.status(500).json({ success: false, message: 'Database operation failed' });
       }
 
       if (results.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: 'Service not found or no permission'
-        });
+        return res.status(404).json({ success: false, message: 'Service not found or you do not have permission to edit this' });
       }
 
-      // Get the updated service
-      db.query(
-        `SELECT id, name, price FROM services WHERE id = ?`,
-        [id],
-        (error, serviceResults) => {
-          if (error) {
-            return res.status(500).json({
-              success: false,
-              message: 'Failed to fetch updated service'
-            });
-          }
-
-          res.status(200).json({
-            success: true,
-            message: 'Service updated successfully',
-            service: serviceResults[0]
-          });
-        }
-      );
-    }
-  );
+      return res.status(200).json({ success: true, message: 'Service updated successfully' });
+    });
+  } catch (error) {
+    console.log("error", error);
+    return res.status(200).json({ success: false, message: error?.message });
+  }
 };

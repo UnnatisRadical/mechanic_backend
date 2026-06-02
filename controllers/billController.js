@@ -33,7 +33,6 @@ export const createBill = async (req, res) => {
       payment_method
     } = req.body;
 
-    // Strict Validations
     if (!admin_id || !customer_name || !contact || (service_taken.length === 0 && parts_taken.length === 0)) {
       return res.status(400).json({ error: "Missing required fields. Customer details and items are required." });
     }
@@ -47,7 +46,6 @@ export const createBill = async (req, res) => {
     if (!date || isNaN(new Date(date))) return res.status(400).json({ error: "Invalid date" });
     if (!['cash', 'online'].includes(payment_method)) return res.status(400).json({ error: "Invalid payment method" });
 
-    // Precise Backend Calculations for validation Cross-check
     const serviceTotal = service_taken.reduce((sum, service) => sum + parseFloat(service.price || 0), 0);
     const partsTotal = parts_taken.reduce((sum, part) => sum + (parseFloat(part.sellingPrice || 0) * (part.qty || 1)), 0);
 
