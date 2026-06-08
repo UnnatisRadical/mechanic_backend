@@ -20,26 +20,7 @@ export const getCustomerBills = async (req, res) => {
       return res.status(400).json({ error: "Admin ID and contact are required" });
     }
 
-    const query = `
-      SELECT 
-        bill_id, 
-        customer_name, 
-        contact,
-        customer_email,
-        customer_address,
-        service_taken,
-        parts_taken,
-        other_charges,
-        vehicle_details,
-        COALESCE(CAST(discount AS DECIMAL(10,2)), 0) as discount,
-        total_bill, 
-        date,
-        tax_rate,
-        payment_method
-      FROM bills
-      WHERE admin_id = ? AND contact = ?
-      ORDER BY date DESC
-    `;
+    const query = `SELECT * FROM bills WHERE admin_id = ? AND contact = ? ORDER BY date DESC`;
 
     db.query(query, [admin_id, contact], (err, results) => {
       if (err) {
@@ -128,20 +109,7 @@ export const getWorkHistory = async (req, res) => {
       return res.status(400).json({ error: "Admin ID is required" });
     }
 
-    const query = `
-      SELECT 
-        bill_id as id,
-        customer_name,
-        contact,
-        service_taken,
-        other_charges,
-        total_bill as total_with_tax,
-        date,
-        tax_rate
-      FROM bills
-      WHERE admin_id = ?
-      ORDER BY date DESC
-    `;
+    const query = `SELECT * FROM bills WHERE admin_id = ? ORDER BY date DESC`;
 
     db.query(query, [admin_id], (err, results) => {
       if (err) {
@@ -153,7 +121,7 @@ export const getWorkHistory = async (req, res) => {
         id: item.id || 0,
         customer_name: item.customer_name || "N/A",
         service_taken: tryParseJSON(item.service_taken) || [],
-        other_charges: parseFloat(item.other_charges) || 0,
+        other_charges: tryParseJSON(item.other_charges) || 0,
         total_with_tax: parseFloat(item.total_with_tax) || 0,
         tax_rate: item.tax_rate ? parseFloat(item.tax_rate) : null,
         date: item.date || null
