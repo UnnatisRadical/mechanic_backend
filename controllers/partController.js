@@ -62,7 +62,7 @@ export const getParts = async (req, res) => {
             return res.status(400).json({ success: false, message: "Admin ID is required" });
         }
 
-        const sql = `SELECT * FROM spare_parts  WHERE admin_id = ? ORDER BY created_at DESC`;
+        const sql = `SELECT * FROM spare_parts WHERE admin_id = ? ORDER BY created_at DESC`;
 
         db.query(sql, [adminId], (err, results) => {
             if (err) {
