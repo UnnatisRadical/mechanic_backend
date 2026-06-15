@@ -7,7 +7,6 @@ function tryParseJSON(jsonString) {
     }
     return jsonString;
   } catch (e) {
-    console.error("JSON parse error:", e);
     return [];
   }
 }
@@ -464,7 +463,8 @@ export const getPendingBalances = (req, res) => {
       date,
       balance,
       total_bill,
-      received
+      received,
+      invoiceid
     FROM bills 
     WHERE admin_id = ? AND balance > 0
     ORDER BY date DESC

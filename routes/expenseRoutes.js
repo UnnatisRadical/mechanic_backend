@@ -12,7 +12,7 @@ const router = Router();
 router.post("/expenses", addExpense);
 router.get("/expenses", getExpenses);
 router.get("/expense-categories", getExpenseCategories);
-router.patch("/expenses/:id", updateExpense);
+router.put("/expenses/:id", updateExpense);
 router.delete("/expenses/:id", deleteExpense);
 
 export default router;

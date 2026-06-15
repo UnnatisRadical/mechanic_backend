@@ -61,6 +61,31 @@ export const getAllVehicles = async (req, res) => {
     }
 };
 
+export const deleteVehicle = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { admin_id } = req.body;
+
+        if (!admin_id) {
+            return res.status(400).json({ success: false, message: "Admin ID is required" });
+        }
+
+        db.query("DELETE FROM vehicles WHERE id = ? AND admin_id = ?", [id, admin_id], (err, result) => {
+            if (err) {
+                return res.status(500).json({ success: false, message: "Database operation failed" });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ success: false, message: "Vehicle not found or unauthorized" });
+            }
+
+            return res.status(200).json({ success: true, message: "Vehicle deleted successfully" });
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+    }
+};
+
 export const updateVehicle = async (req, res) => {
     try {
         const { id } = req.params;

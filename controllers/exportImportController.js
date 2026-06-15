@@ -22,7 +22,8 @@ function tryParseJSON(jsonString) {
 
 export const exportBills = async (req, res) => {
   try {
-    const { adminId, startDate, endDate, customerName } = req.body;
+    // UPDATE: Request body se deletedInvoices array bhi accept karenge
+    const { adminId, startDate, endDate, customerName, deletedInvoices } = req.body;
 
     if (!adminId) {
       return res.status(400).json({ 
@@ -31,10 +32,21 @@ export const exportBills = async (req, res) => {
       });
     }
 
-    // Build query dynamically: allow filtering by customerName (partial match) OR by date range.
+    // Parse deleted invoices IDs
+    let excludedInvoiceIds = [];
+    if (deletedInvoices) {
+      try {
+        const parsedTrash = typeof deletedInvoices === 'string' ? JSON.parse(deletedInvoices) : deletedInvoices;
+        excludedInvoiceIds = parsedTrash.map(trash => Number(trash.bill_id || trash.invoiceid || trash));
+      } catch (e) {
+        console.error("Trash parsing error in export:", e);
+      }
+    }
+
     let query = `
       SELECT 
         bill_id as id,
+        invoiceid,
         customer_name,
         contact,
         service_taken,
@@ -57,11 +69,16 @@ export const exportBills = async (req, res) => {
       query += ` AND date >= ? AND date <= ?`;
       params.push(startDate, endDate);
     } else {
-      // If neither customerName nor date range provided, return bad request
       return res.status(400).json({
         success: false,
         error: 'Provide either customerName (optional) or startDate and endDate to export',
       });
+    }
+
+    // UPDATE: Agar deletedInvoices maujood hain to query me exclude lagayein
+    if (excludedInvoiceIds.length > 0) {
+      query += ` AND bill_id NOT IN (?) AND invoiceid NOT IN (?)`;
+      params.push(excludedInvoiceIds, excludedInvoiceIds);
     }
 
     query += ` ORDER BY date DESC`;
@@ -77,7 +94,7 @@ export const exportBills = async (req, res) => {
 
       // Format data for Excel
       const formattedData = results.map(bill => ({
-        'Bill ID': bill.id || '',
+        'Bill ID': bill.invoiceid || bill.id || '',
         'Date': bill.date ? moment(bill.date).format('YYYY-MM-DD') : '',
         'Customer Name': bill.customer_name || '',
         'Contact': bill.contact || '',
@@ -95,41 +112,23 @@ export const exportBills = async (req, res) => {
         'Payment Method': bill.payment_method || 'cash'
       }));
 
-      // Create workbook
       const wb = XLSX.utils.book_new();
-      
-      // Add worksheet
       const ws = XLSX.utils.json_to_sheet(formattedData);
       
-      // Set column widths
       const wscols = [
-        { wch: 10 }, // Bill ID
-        { wch: 12 }, // Date
-        { wch: 20 }, // Customer Name
-        { wch: 15 }, // Contact
-        { wch: 30 }, // Services
-        { wch: 12 }, // Other Charges
-        { wch: 10 }, // Discount
-        { wch: 10 }, // Tax Rate
-        { wch: 12 }, // Total Amount
-        { wch: 15 }  // Payment Method
+        { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 30 },
+        { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
       ];
       ws['!cols'] = wscols;
       
       XLSX.utils.book_append_sheet(wb, ws, "Bills");
 
-      // Generate buffer
-      const buffer = XLSX.write(wb, { 
-        bookType: 'xlsx', 
-        type: 'buffer' 
-      });
+      const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
 
-      // Set headers
       const filename = `bills_export_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       
-      // Send the file
       res.send(buffer);
     });
   } catch (error) {

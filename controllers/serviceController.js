@@ -53,66 +53,30 @@ export const getServicesByAdmin = async (req, res) => {
   }
 };
 
-export const removeService = async (req, res) => {
+export const deleteService = async (req, res) => {
   try {
-    const { service_id } = req.body;
-
-    if (!service_id) {
-      return res.status(400).json({ error: "Service ID is required" });
-    }
-
-    const query = "UPDATE services SET status = 'deleted' WHERE id = ?";
-    db.query(query, [service_id], (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: "Database error", details: err });
-      }
-      res.status(200).json({ message: "Service removed successfully" });
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const getDeletedServicesByAdmin = async (req, res) => {
-  try {
-    const { admin_id } = req.params;
+    const { id } = req.params;
+    const { admin_id } = req.body;
 
     if (!admin_id) {
-      return res.status(400).json({ error: "Admin ID is required" });
+      return res.status(400).json({ success: false, message: "Admin ID is required" });
     }
 
-    const query = "SELECT * FROM services WHERE admin_id = ? AND status = 'deleted'";
-    db.query(query, [admin_id], (err, results) => {
+    db.query("DELETE FROM services WHERE id = ? AND admin_id = ?", [id, admin_id], (err, result) => {
       if (err) {
-        return res.status(500).json({ error: "Database error", details: err });
+        return res.status(500).json({ success: false, message: "Database operation failed" });
       }
-      res.status(200).json(results);
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "Service not found or unauthorized" });
+      }
+
+      return res.status(200).json({ success: true, message: "Service deleted successfully" });
     });
   } catch (error) {
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };
-
-export const restoreService = async (req, res) => {
-  try {
-    const { service_id } = req.body;
-
-    if (!service_id) {
-      return res.status(400).json({ error: "Service ID is required" });
-    }
-
-    const query = "UPDATE services SET status = 'active' WHERE id = ?";
-    db.query(query, [service_id], (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: "Database error", details: err });
-      }
-      res.status(200).json({ message: "Service restored successfully" });
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 
 export const editService = (req, res) => {
   const { id, name, price, category, description, duration, status, admin_id } = req.body;
@@ -130,7 +94,6 @@ export const editService = (req, res) => {
 
     db.query(queryText, queryValues, (error, results) => {
       if (error) {
-        console.error("Database Error:", error);
         return res.status(500).json({ success: false, message: 'Database operation failed' });
       }
 
@@ -141,7 +104,6 @@ export const editService = (req, res) => {
       return res.status(200).json({ success: true, message: 'Service updated successfully' });
     });
   } catch (error) {
-    console.log("error", error);
     return res.status(200).json({ success: false, message: error?.message });
   }
 };

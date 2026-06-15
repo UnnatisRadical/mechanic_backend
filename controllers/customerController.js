@@ -267,6 +267,69 @@ export const updateCustomer = async (req, res) => {
     });
 };
 
+export const deleteCustomer = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { admin_id } = req.body;
+
+        if (!admin_id) {
+            return res.status(400).json({ success: false, message: "Admin ID is required" });
+        }
+
+        db.getConnection((connErr, connection) => {
+            if (connErr) {
+                return res.status(500).json({ success: false, message: "Database connection failed" });
+            }
+
+            connection.beginTransaction((transactionErr) => {
+                if (transactionErr) {
+                    connection.release();
+                    return res.status(500).json({ success: false, message: "Transaction failed to start" });
+                }
+
+                connection.query("DELETE FROM vehicles WHERE customer_id = ? AND admin_id = ?", [id, admin_id], (vehErr) => {
+                    if (vehErr) {
+                        return connection.rollback(() => {
+                            connection.release();
+                            return res.status(500).json({ success: false, message: "Error deleting related vehicles" });
+                        });
+                    }
+
+                    connection.query("DELETE FROM customers WHERE id = ? AND admin_id = ?", [id, admin_id], (custErr, result) => {
+                        if (custErr) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                return res.status(500).json({ success: false, message: "Database operation failed" });
+                            });
+                        }
+
+                        if (result.affectedRows === 0) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                return res.status(404).json({ success: false, message: "Customer not found or unauthorized" });
+                            });
+                        }
+
+                        connection.commit((commitErr) => {
+                            if (commitErr) {
+                                return connection.rollback(() => {
+                                    connection.release();
+                                    return res.status(500).json({ success: false, message: "Transaction commit failed" });
+                                });
+                            }
+
+                            connection.release();
+                            return res.status(200).json({ success: true, message: "Customer deleted successfully" });
+                        });
+                    });
+                });
+            });
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: "Internal Server Error" });
+    }
+};
+
 const commitTransaction = (connection, res, successMessage) => {
     connection.commit((commitErr) => {
         if (commitErr) {

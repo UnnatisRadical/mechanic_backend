@@ -49,7 +49,6 @@ export const getDashboardRevenueTrend = async (req, res) => {
 
     return res.json({ revenueTrendGraph: graphDataArray });
   } catch (error) {
-    console.error("Revenue Trend Error:", error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (connection) connection.release();
@@ -70,30 +69,25 @@ export const getDashboardData = async (req, res) => {
 
     const [metrics] = await connection.query(
       `SELECT 
-        COALESCE(SUM(CASE WHEN date >= CURDATE() THEN total_bill ELSE 0 END), 0) as today,
-        
-        COALESCE(SUM(CASE WHEN date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND date < CURDATE() THEN total_bill ELSE 0 END), 0) as yesterday,
-        
-        COALESCE(SUM(CASE WHEN date >= DATE_SUB(CURDATE(), INTERVAL 2 DAY) AND date < DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN total_bill ELSE 0 END), 0) as day_before_yesterday,
-        
-        COALESCE(SUM(CASE WHEN YEARWEEK(date, 1) = YEARWEEK(CURDATE(), 1) THEN total_bill ELSE 0 END), 0) as week,
-        
-        COALESCE(SUM(CASE WHEN YEARWEEK(date, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1) THEN total_bill ELSE 0 END), 0) as last_week,
-        
-        COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(CURDATE()) AND MONTH(date) = MONTH(CURDATE()) THEN total_bill ELSE 0 END), 0) as month,
-        
-        COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(date) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) THEN total_bill ELSE 0 END), 0) as last_month,
-        
-        COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(CURDATE()) THEN total_bill ELSE 0 END), 0) as year,
-        
-        COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 YEAR)) THEN total_bill ELSE 0 END), 0) as last_year,
-        
-        COALESCE(SUM(total_bill), 0) as total,
-        COALESCE(SUM(balance), 0) as pending_payments,
-        COUNT(CASE WHEN balance > 0 THEN 1 END) as no_of_pending_payments,
-        COUNT(*) as invoice_count
-        FROM bills 
-        WHERE admin_id = ?`,
+    COALESCE(SUM(CASE WHEN date >= CURDATE() THEN total_bill ELSE 0 END), 0) as today,
+    COALESCE(SUM(CASE WHEN date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND date < CURDATE() THEN total_bill ELSE 0 END), 0) as yesterday,
+    COALESCE(SUM(CASE WHEN date >= DATE_SUB(CURDATE(), INTERVAL 2 DAY) AND date < DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN total_bill ELSE 0 END), 0) as day_before_yesterday,
+    COALESCE(SUM(CASE WHEN YEARWEEK(date, 1) = YEARWEEK(CURDATE(), 1) THEN total_bill ELSE 0 END), 0) as week,
+    COALESCE(SUM(CASE WHEN YEARWEEK(date, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1) THEN total_bill ELSE 0 END), 0) as last_week,
+    COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(CURDATE()) AND MONTH(date) = MONTH(CURDATE()) THEN total_bill ELSE 0 END), 0) as month,
+    COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(date) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) THEN total_bill ELSE 0 END), 0) as last_month,
+    COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(CURDATE()) THEN total_bill ELSE 0 END), 0) as year,
+    COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 YEAR)) THEN total_bill ELSE 0 END), 0) as last_year,
+    COALESCE(SUM(total_bill), 0) as total,
+    
+    -- FIXED: Dono lines ka hona zaroori hai taaki niche code crash na ho
+    COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0) as pending_payments,
+    GROUP_CONCAT(CASE WHEN balance > 0 THEN bill_id END) as pending_invoice_ids,
+    
+    COUNT(CASE WHEN balance > 0 THEN 1 END) as no_of_pending_payments,
+    COUNT(*) as invoice_count
+   FROM bills 
+   WHERE admin_id = ?`,
       [admin_id]
     );
 
@@ -135,7 +129,16 @@ export const getDashboardData = async (req, res) => {
       [admin_id]
     );
 
+    const [pendingInvoices] = await connection.query(
+      `SELECT invoiceid, total_bill, balance FROM bills WHERE admin_id = ? AND balance > 0`,
+      [admin_id]
+    );
+
     const data = metrics[0];
+
+    const pendingInvoiceIdsArray = data.pending_invoice_ids
+      ? data.pending_invoice_ids.split(',').map(id => parseInt(id, 10))
+      : [];
 
     res.json({
       todayEarnings: parseFloat(data.today),
@@ -149,16 +152,17 @@ export const getDashboardData = async (req, res) => {
       lastYearEarnings: parseFloat(data.last_year),
       totalEarnings: parseFloat(data.total),
       pendingPayments: parseFloat(data.pending_payments),
+      pendingInvoiceIds: pendingInvoiceIdsArray,
       noofPendingPayments: parseInt(data.no_of_pending_payments || 0, 10),
       rawServices,
       activeServices,
+      pendingInvoices,
       invoiceCount: data.invoice_count,
       lastUpdated: new Date().toISOString(),
       monthlyTrendGraph: graphDataArray
     });
 
   } catch (error) {
-    console.log("error", error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (connection) connection.release();

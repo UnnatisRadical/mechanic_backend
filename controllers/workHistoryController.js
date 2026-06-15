@@ -1,4 +1,3 @@
-// controllers/workHistoryController.js
 import db from "../db/db.js";
 
 function tryParseJSON(jsonString) {
