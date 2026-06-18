@@ -90,7 +90,7 @@ export const updateVehicle = async (req, res) => {
     try {
         const { id } = req.params;
         const { customerId, brand, model, vehicleNumber, year, type, fuel, status } = req.body;
-        console.log("fuel", fuel);
+
         if (!brand || !model || !vehicleNumber) {
             return res.status(400).json({
                 success: false,

@@ -3,7 +3,7 @@ import db from "../db/db.js";
 export const addSparePart = async (req, res) => {
     try {
         const {
-            adminId, name, sku, categoryName, brand, description, costPrice, sellingPrice, mrp, stockQuantity, lowStockThreshold, location,
+            adminId, name, sku, categoryName, brand, description, costPrice, sellingPrice, mrp, stockQuantity, newStock, lowStockThreshold, location,
             unit, supplierName, status
         } = req.body;
 
@@ -15,8 +15,8 @@ export const addSparePart = async (req, res) => {
         }
 
         const sql = `INSERT INTO spare_parts (
-            admin_id, name, sku, category_name, brand, description, cost_price, selling_price, mrp, stock_quantity, low_stock_threshold, location, unit, supplier_name, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            admin_id, name, sku, category_name, brand, description, cost_price, selling_price, mrp, stock_quantity, new_stock, low_stock_threshold, location, unit, supplier_name, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const values = [
             adminId,
@@ -29,6 +29,7 @@ export const addSparePart = async (req, res) => {
             parseFloat(sellingPrice) || 0.00,
             mrp ? parseFloat(mrp) : null,
             parseInt(stockQuantity) || 0,
+            parseInt(newStock) || 0,
             lowStockThreshold !== undefined ? parseInt(lowStockThreshold) : 5,
             location || null,
             unit || 'Pcs',
@@ -104,7 +105,7 @@ export const updateSparePart = async (req, res) => {
     try {
         const { id } = req.params;
         const { 
-            adminId, name, sku, categoryName, brand, description, stockQuantity, costPrice, sellingPrice, mrp, lowStockThreshold, location, unit, supplierName, status
+            adminId, name, sku, categoryName, brand, description, stockQuantity, newStock, costPrice, sellingPrice, mrp, lowStockThreshold, location, unit, supplierName, status
         } = req.body;
 
         if (!adminId) {
@@ -117,8 +118,8 @@ export const updateSparePart = async (req, res) => {
                 message: "Required fields (Name, SKU, Category, Quantity, Cost Price) are missing",
             });
         }
-
-        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, stock_quantity = ?, cost_price = ?, selling_price = ?, mrp = ?, low_stock_threshold = ?, location = ?, unit = ?, supplier_name = ?, status = ? WHERE id = ? AND admin_id = ?`;
+        
+        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, stock_quantity = ?, new_stock = ?, cost_price = ?, selling_price = ?, mrp = ?, low_stock_threshold = ?, location = ?, unit = ?, supplier_name = ?, status = ? WHERE id = ? AND admin_id = ?`;
 
         const values = [
             name,
@@ -127,6 +128,7 @@ export const updateSparePart = async (req, res) => {
             brand || null,
             description || null,
             parseInt(stockQuantity) || 0,
+            parseInt(newStock) || 0,
             parseFloat(costPrice) || 0.00,
             parseFloat(sellingPrice) || 0.00,
             mrp ? parseFloat(mrp) : null,
