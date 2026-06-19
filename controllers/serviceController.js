@@ -2,30 +2,72 @@ import db from "../db/db.js";
 
 export const addService = async (req, res) => {
   try {
-    const { name, category, description, duration, price, status, admin_id } = req.body;
+    const {
+      name,
+      category,
+      vehicle_type,
+      price_2w,
+      price_4w,
+      status,
+      admin_id,
+    } = req.body;
 
-    if (!name || !category || !duration || !price || !status || !admin_id) {
-      return res.status(400).json({ error: "All required fields must be filled" });
+    if (!name || !category || !vehicle_type || !status || !admin_id) {
+      return res
+        .status(400)
+        .json({ error: "All required fields must be filled" });
     }
 
-    const checkQuery = "SELECT * FROM services WHERE name = ? AND admin_id = ? AND status = 'active'";
+    if (
+      (vehicle_type === "2 Wheeler" || vehicle_type === "Both") &&
+      !price_2w
+    ) {
+      return res.status(400).json({ error: "2 Wheeler price is required" });
+    }
+    if (
+      (vehicle_type === "4 Wheeler" || vehicle_type === "Both") &&
+      !price_4w
+    ) {
+      return res.status(400).json({ error: "4 Wheeler price is required" });
+    }
+
+    const checkQuery =
+      "SELECT * FROM services WHERE name = ? AND admin_id = ? AND status = 'active'";
     db.query(checkQuery, [name, admin_id], (err, results) => {
-      if (err) {
+      if (err) 
         return res.status(500).json({ error: "Database error", details: err });
-      }
+
       if (results.length > 0) {
         return res.status(400).json({ error: "Service already exists" });
       }
 
-      const insertQuery = `INSERT INTO services (name, category, description, duration, price, status, admin_id)VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      const insertQuery = `
+        INSERT INTO services 
+          (name, category, vehicle_type, price_2w, price_4w, status, admin_id)
+        VALUES 
+          (?, ?, ?, ?, ?, ?, ?)
+      `;
 
-      const dbStatus = status.toLowerCase();
+      const values = [
+        name,
+        category,
+        vehicle_type,
+        price_2w || null,
+        price_4w || null,
+        status.toLowerCase(),
+        admin_id,
+      ];
 
-      db.query(insertQuery, [name, category, description || null, duration, price, dbStatus, admin_id], (err, result) => {
-        if (err) {
-          return res.status(500).json({ error: "Database error", details: err });
-        }
-        res.status(201).json({ message: "Service added successfully", serviceId: result.insertId });
+      db.query(insertQuery, values, (err, result) => {
+        if (err)
+          return res
+            .status(500)
+            .json({ error: "Database error", details: err });
+
+        res.status(201).json({
+          message: "Service added successfully",
+          serviceId: result.insertId,
+        });
       });
     });
   } catch (error) {
@@ -78,32 +120,101 @@ export const deleteService = async (req, res) => {
   }
 };
 
-export const editService = (req, res) => {
-  const { id, name, price, category, description, duration, status, admin_id } = req.body;
-
+export const editService = async (req, res) => {
   try {
-    if (!id || !name || price === undefined || !admin_id) {
-      return res.status(400).json({ success: false, message: 'Missing required fields (id, name, price, or admin_id)' });
+    const {
+      id,
+      name,
+      category,
+      vehicle_type,
+      price_2w,
+      price_4w,
+      status,
+      admin_id,
+    } = req.body;
+
+    if (!id || !name || !category || !vehicle_type || !status || !admin_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "All required fields must be filled" });
     }
 
-    const queryText = `
-    UPDATE services SET name = ?, price = ?, category = ?, description = ?, duration = ?, status = ? WHERE id = ? AND admin_id = ?
-  `;
+    if ((vehicle_type === "2 Wheeler" || vehicle_type === "Both") && !price_2w) {
+      return res
+        .status(400)
+        .json({ success: false, message: "2 Wheeler price is required" });
+    }
+    if ((vehicle_type === "4 Wheeler" || vehicle_type === "Both") && !price_4w) {
+      return res
+        .status(400)
+        .json({ success: false, message: "4 Wheeler price is required" });
+    }
 
-    const queryValues = [name, price, category, description, duration, status, id, admin_id];
-
-    db.query(queryText, queryValues, (error, results) => {
-      if (error) {
-        return res.status(500).json({ success: false, message: 'Database operation failed' });
+    const checkDuplicateQuery = `
+      SELECT * FROM services 
+      WHERE name = ? AND admin_id = ? AND status = 'active' AND id != ?
+    `;
+    
+    db.query(checkDuplicateQuery, [name, admin_id, id], (err, results) => {
+      if (err) {
+        return res
+          .status(500)
+          .json({ success: false, message: "Database error during validation", details: err });
       }
 
-      if (results.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Service not found or you do not have permission to edit this' });
+      if (results.length > 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "This service name is already taken" });
       }
 
-      return res.status(200).json({ success: true, message: 'Service updated successfully' });
+      const updateQuery = `
+        UPDATE services 
+        SET 
+          name = ?, 
+          category = ?, 
+          vehicle_type = ?, 
+          price_2w = ?, 
+          price_4w = ?, 
+          status = ? 
+        WHERE id = ? AND admin_id = ?
+      `;
+
+      const values = [
+        name,
+        category,
+        vehicle_type,
+        price_2w || null,
+        price_4w || null,
+        status.toLowerCase(),
+        id,
+        admin_id,
+      ];
+
+      db.query(updateQuery, values, (error, results) => {
+        if (error) {
+          return res
+            .status(500)
+            .json({ success: false, message: "Database operation failed", details: error });
+          }
+
+        if (results.affectedRows === 0) {
+          return res
+            .status(404)
+            .json({ 
+              success: false, 
+              message: "Service not found or you do not have permission to edit this" 
+            });
+        }
+
+        return res
+          .status(200)
+          .json({ success: true, message: "Service updated successfully" });
+      });
     });
   } catch (error) {
-    return res.status(200).json({ success: false, message: error?.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error", details: error?.message });
   }
 };

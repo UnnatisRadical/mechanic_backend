@@ -329,13 +329,11 @@ export const verifyAdminBeforeDelete = async (req, res) => {
   const adminId = req.params.id;
   const { email } = req.body;
 
-  // 1. Validation check ki email request body me hai ya nahi
   if (!email) {
     return res.status(400).json({ message: "Email is required for verification" });
   }
 
   try {
-    // 2. Database se admin details fetch karein
     db.query(
       "SELECT email FROM admins WHERE id = ?",
       [adminId],
@@ -350,12 +348,10 @@ export const verifyAdminBeforeDelete = async (req, res) => {
 
         const admin = results[0];
 
-        // 3. Email cross-verify karein
         if (admin.email.toLowerCase() !== email.toLowerCase()) {
           return res.status(401).json({ message: "Email does not match this account" });
         }
 
-        // 4. Verification successful
         res.json({
           success: true,
           message: "Identity verified successfully. You can now proceed to delete your account."
@@ -374,63 +370,74 @@ export const deleteAdminAccount = async (req, res) => {
     if (err) return res.status(500).json({ message: "Database error during validation" });
     if (results.length === 0) return res.status(404).json({ message: "Admin not found" });
 
-    db.beginTransaction(async (transactionErr) => {
-      if (transactionErr) {
-        return res.status(500).json({ message: "Could not start deletion transaction" });
+    db.getConnection((poolErr, connection) => {
+      if (poolErr) {
+        return res.status(500).json({ message: "Database connection pool error", error: poolErr.message });
       }
 
-      try {
-        const relatedTables = [
-          "bills",
-          "customer",
-          "expences",
-          "services",
-          "spare_parts",
-          "tax_details",
-          "vehicles"
-        ];
+      connection.beginTransaction(async (transactionErr) => {
+        if (transactionErr) {
+          connection.release();
+          return res.status(500).json({ message: "Could not start deletion transaction" });
+        }
 
-        for (const table of relatedTables) {
+        try {
+          const relatedTables = [
+            "bills",
+            "customers",
+            "expenses",
+            "services",
+            "spare_parts",
+            "tax_details",
+            "vehicles"
+          ];
+
+          for (const table of relatedTables) {
+            await new Promise((resolve, reject) => {
+              connection.query(
+                `DELETE FROM ${table} WHERE admin_id = ?`,
+                [adminId],
+                (deleteErr) => {
+                  if (deleteErr) reject(deleteErr);
+                  else resolve();
+                }
+              );
+            });
+          }
+
           await new Promise((resolve, reject) => {
-            db.query(
-              `DELETE FROM ${table} WHERE admin_id = ?`,
+            connection.query(
+              "DELETE FROM admins WHERE id = ?",
               [adminId],
-              (deleteErr) => {
+              (deleteErr, result) => {
                 if (deleteErr) reject(deleteErr);
-                else resolve();
+                else resolve(result);
               }
             );
           });
-        }
 
-        await new Promise((resolve, reject) => {
-          db.query(
-            "DELETE FROM admins WHERE id = ?",
-            [adminId],
-            (deleteErr, result) => {
-              if (deleteErr) reject(deleteErr);
-              else resolve(result);
+          connection.commit((commitErr) => {
+            if (commitErr) {
+              return connection.rollback(() => {
+                connection.release();
+                res.status(500).json({ message: "Transaction commit failed" });
+              });
             }
-          );
-        });
-
-        db.commit((commitErr) => {
-          if (commitErr) {
-            return db.rollback(() => {
-              res.status(500).json({ message: "Transaction commit failed" });
+            
+            connection.release();
+            res.json({
+              success: true,
+              message: "Account and all associated data deleted successfully."
             });
-          }
-          res.json({
-            success: true,
-            message: "Account and all associated data deleted successfully."
           });
-        });
 
-      } catch (error) {
-        db.rollback(() => {
-          res.status(500).json({ message: "Error deleting data", error: error.message });
-        });
-      }
+        } catch (error) {
+          connection.rollback(() => {
+            connection.release();
+            res.status(500).json({ message: "Error deleting data", error: error.message });
+          });
+        }
+      });
     });
   });
 };

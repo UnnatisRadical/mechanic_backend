@@ -35,8 +35,16 @@ export const createBill = async (req, res) => {
     if (!['unpaid', 'partial', 'paid'].includes(payment_status)) return res.status(400).json({ error: "Invalid payment status" });
 
     if (['paid', 'partial'].includes(payment_status)) {
+      if (received <= 0) {
+        return res.status(400).json({
+          error: `Received or Partial amount must be greater than 0 for ${payment_status} payment.`
+        });
+      }
+
       if (!['cash', 'online'].includes(payment_method)) {
-        return res.status(400).json({ error: "Payment method is required and must be 'cash' or 'online' for paid/partial status." });
+        return res.status(400).json({
+          error: "Payment method is required and must be 'cash' or 'online' for paid/partial status."
+        });
       }
     } else {
       payment_method = null;
@@ -44,7 +52,9 @@ export const createBill = async (req, res) => {
 
     if (['unpaid', 'partial'].includes(payment_status)) {
       if (!due_date || isNaN(new Date(due_date))) {
-        return res.status(400).json({ error: "Due date is required and must be a valid date for unpaid or partial payments." });
+        return res.status(400).json({
+          error: "Due date is required and must be a valid date for unpaid or partial payments."
+        });
       }
 
       const parsedDueDate = new Date(due_date);
@@ -456,19 +466,7 @@ export const getPendingBalances = (req, res) => {
     return res.status(400).json({ success: false, error: "Admin ID is required" });
   }
 
-  const query = `
-    SELECT 
-      bill_id,
-      customer_name,
-      date,
-      balance,
-      total_bill,
-      received,
-      invoiceid
-    FROM bills 
-    WHERE admin_id = ? AND balance > 0
-    ORDER BY date DESC
-  `;
+  const query = `SELECT * FROM bills  WHERE admin_id = ? AND balance > 0 ORDER BY date DESC`;
 
   db.query(query, [admin_id], (err, results) => {
     if (err) {
