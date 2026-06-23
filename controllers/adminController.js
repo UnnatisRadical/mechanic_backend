@@ -92,6 +92,7 @@ export const loginAdmin = (req, res) => {
             country: admin.country,
             currency: admin.currency,
             country_code: admin.country_code,
+            is_premium: admin.is_premium,
           },
         });
       } catch (error) {
@@ -423,7 +424,7 @@ export const deleteAdminAccount = async (req, res) => {
                 res.status(500).json({ message: "Transaction commit failed" });
               });
             }
-            
+
             connection.release();
             res.json({
               success: true,
@@ -440,4 +441,25 @@ export const deleteAdminAccount = async (req, res) => {
       });
     });
   });
+};
+
+export const updatePremiumStatus = (req, res) => {
+  const { adminId, isPremium } = req.body;
+
+  if (!adminId) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
+
+  try {
+    db.query("UPDATE admins SET is_premium=? WHERE id=?", [isPremium ? 1 : 0, adminId], (err, result) => {
+      if (err) {
+        console.log(err);
+        return res.status(500).json({ success: false, message: "Database error" });
+      }
+
+      return res.json({ success: true, message: "Premium updated" });
+    });
+  } catch (error) {
+    return res.json({ success: true, message: "Internal server error" });
+  }
 };

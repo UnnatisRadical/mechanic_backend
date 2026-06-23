@@ -2,7 +2,8 @@ import { Router } from "express";
 import {
   registerAdmin, loginAdmin, getAdminById, updateAdmin, changeAdminPassword, getAdminSettings, updateAdminSettings, googleSignIn,
   deleteAdminAccount,
-  verifyAdminBeforeDelete
+  verifyAdminBeforeDelete,
+  updatePremiumStatus
 } from "../controllers/adminController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 
@@ -21,5 +22,6 @@ router.get("/:id/settings", getAdminSettings);
 router.put("/:id/settings", updateAdminSettings);
 router.post("/:id/verify-delete", verifyAdminBeforeDelete);
 router.delete("/:id", deleteAdminAccount);
+router.put("/premium", updatePremiumStatus);
 
 export default router;
