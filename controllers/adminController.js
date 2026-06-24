@@ -453,10 +453,8 @@ export const updatePremiumStatus = (req, res) => {
   try {
     db.query("UPDATE admins SET is_premium=? WHERE id=?", [isPremium ? 1 : 0, adminId], (err, result) => {
       if (err) {
-        console.log(err);
         return res.status(500).json({ success: false, message: "Database error" });
       }
-
       return res.json({ success: true, message: "Premium updated" });
     });
   } catch (error) {

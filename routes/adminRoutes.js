@@ -15,6 +15,7 @@ router.post("/google-signin", googleSignIn);
 router.get("/protected", verifyToken, (req, res) => {
   res.json({ message: "Access granted", admin: req.admin });
 });
+router.put("/premium", updatePremiumStatus);
 router.get("/:id", getAdminById);
 router.put("/:id", updateAdmin);
 router.put("/:id/password", changeAdminPassword);
@@ -22,6 +23,5 @@ router.get("/:id/settings", getAdminSettings);
 router.put("/:id/settings", updateAdminSettings);
 router.post("/:id/verify-delete", verifyAdminBeforeDelete);
 router.delete("/:id", deleteAdminAccount);
-router.put("/premium", updatePremiumStatus);
 
 export default router;
