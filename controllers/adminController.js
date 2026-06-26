@@ -8,100 +8,6 @@ dotenv.config();
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_WEB_CLIENT_ID);
 
-export const registerAdmin = async (req, res) => {
-  const { shop_name, email, contact, country, currency, password } = req.body;
-
-  try {
-    const existingAdmin = await new Promise((resolve, reject) => {
-      db.query(
-        "SELECT * FROM admins WHERE email = ?",
-        [email],
-        (err, results) => {
-          if (err) reject(err);
-          resolve(results);
-        },
-      );
-    });
-
-    if (existingAdmin.length > 0) {
-      return res.status(400).json({ message: "Email already registered" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    db.query(
-      "INSERT INTO admins (shop_name, email, contact, country, currency, password) VALUES (?, ?, ?, ?, ?, ?)",
-      [shop_name, email, contact, country, currency || "", hashedPassword],
-      (err, result) => {
-        if (err) return res.status(500).json({ message: err.message });
-        res.json({
-          message: "Admin registered successfully",
-          adminId: result.insertId,
-        });
-      },
-    );
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-export const loginAdmin = (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email and password are required" });
-  }
-
-  db.query(
-    "SELECT * FROM admins WHERE email = ?",
-    [email],
-    async (err, results) => {
-      if (err) {
-        return res.status(500).json({ message: "Database error" });
-      }
-
-      if (results.length === 0) {
-        return res.status(401).json({ message: "Invalid email or password" });
-      }
-
-      const admin = results[0];
-
-      try {
-        const isValidPassword = await bcrypt.compare(password, admin.password);
-        if (!isValidPassword) {
-          return res.status(401).json({ message: "Invalid email or password" });
-        }
-        if (!process.env.SECRET_KEY) {
-          return res
-            .status(500)
-            .json({ message: "Server configuration error" });
-        }
-
-        const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, {
-          expiresIn: "24h",
-        });
-
-        res.json({
-          message: "Login successful",
-          token,
-          admin: {
-            id: admin.id,
-            shop_name: admin.shop_name,
-            email: admin.email,
-            contact: admin.contact,
-            country: admin.country,
-            currency: admin.currency,
-            country_code: admin.country_code,
-            is_premium: admin.is_premium,
-          },
-        });
-      } catch (error) {
-        res.status(500).json({ message: "Server error during login" });
-      }
-    },
-  );
-};
-
 export const googleSignIn = async (req, res) => {
   const { idToken, shop_name, contact } = req.body;
 
@@ -261,7 +167,7 @@ export const getAdminSettings = async (req, res) => {
   try {
     const adminId = req.params.id;
     db.query(
-      "SELECT currency, country, country_code FROM admins WHERE id = ?",
+      "SELECT currency, country, country_code, invoice_format FROM admins WHERE id = ?",
       [adminId],
       (err, results) => {
         if (err) return res.status(500).json({ message: "Database error" });
@@ -458,6 +364,36 @@ export const updatePremiumStatus = (req, res) => {
       return res.json({ success: true, message: "Premium updated" });
     });
   } catch (error) {
+    return res.json({ success: true, message: "Internal server error" });
+  }
+};
+
+export const updateInvoiceNumberFormat = (req, res) => {
+  const { adminId, prefix, format, digits, resetType } = req.body;
+
+  if (!adminId) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
+
+  const invoiceFormat = {
+    prefix: prefix || "",
+    format: format || "######",
+    digits: digits || 6,
+    resetType: resetType || "monthly"
+  };
+
+  const invoiceFormatJSON = JSON.stringify(invoiceFormat);
+
+  try {
+    db.query("UPDATE admins SET invoice_format = ? WHERE id = ?", [invoiceFormatJSON, adminId], (err, result) => {
+      if (err) {
+        console.log("err", err);
+        return res.status(500).json({ success: false, message: "Database error" });
+      }
+      return res.json({ success: true, message: "Invoice format updated" });
+    });
+  } catch (error) {
+    console.log("error", error);
     return res.json({ success: true, message: "Internal server error" });
   }
 };
