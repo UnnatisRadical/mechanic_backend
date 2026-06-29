@@ -121,10 +121,11 @@ export const createBill = async (req, res) => {
       total_bill,
       date,
       tax_details,
+      payment_status,
       payment_method,
-      invoiceid,
+      invoice_no,
     } = req.body;
-
+ 
     if (
       !admin_id ||
       !customer_name ||
@@ -157,6 +158,22 @@ export const createBill = async (req, res) => {
     if (!["cash", "online"].includes(payment_method))
       return res.status(400).json({ error: "Invalid payment method" });
 
+    if (['paid', 'partial'].includes(payment_status)) {
+      if (received <= 0) {
+        return res.status(400).json({
+          error: `Received or Partial amount must be greater than 0 for ${payment_status} payment.`
+        });
+      }
+
+      if (!['cash', 'online'].includes(payment_method)) {
+        return res.status(400).json({
+          error: "Payment method is required and must be 'cash' or 'online' for paid/partial status."
+        });
+      }
+    } else {
+      payment_method = null;
+    }
+
     const serviceTotal = service_taken.reduce(
       (sum, service) => sum + parseFloat(service.price || 0),
       0,
@@ -173,9 +190,7 @@ export const createBill = async (req, res) => {
         error: "Discount cannot exceed items total plus other charges",
       });
 
-    const tax_rate = tax_details?.wasTaxApplied
-      ? parseFloat(tax_details?.taxRate) || 0
-      : null;
+    const tax_rate = parseFloat(tax_details?.taxRate) || 0;
     const totalWithTax =
       subtotalBeforeTax > 0
         ? subtotalBeforeTax + (subtotalBeforeTax * (tax_rate || 0)) / 100
@@ -194,18 +209,15 @@ export const createBill = async (req, res) => {
       ? JSON.stringify(vehicle_details)
       : null;
 
-    const finalInvoiceNo = invoiceid || "INV-0000";
-
     const insertQuery = `
       INSERT INTO bills 
-        (admin_id, cust_id, invoiceid, customer_name, contact, customer_email, customer_address, vehicle_details, service_taken, parts_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_method)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (admin_id, cust_id, customer_name, contact, customer_email, customer_address, vehicle_details, service_taken, parts_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_status, payment_method, invoiceid)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
       admin_id,
       custId,
-      finalInvoiceNo,
       customer_name,
       contact,
       customer_email || null,
@@ -220,7 +232,9 @@ export const createBill = async (req, res) => {
       total_bill,
       date,
       tax_rate,
+      payment_status,
       payment_method,
+      invoice_no,
     ];
 
 
@@ -234,7 +248,7 @@ export const createBill = async (req, res) => {
         success: true,
         message: "Bill created successfully",
         bill_id: result.insertId,
-        invoiceid: finalInvoiceNo,
+        invoiceid: invoice_no,
       });
     });
   } catch (error) {
