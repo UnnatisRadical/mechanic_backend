@@ -92,9 +92,8 @@ export const exportBills = async (req, res) => {
         });
       }
 
-      // Format data for Excel
       const formattedData = results.map(bill => ({
-        'Bill ID': bill.invoiceid || bill.id || '',
+        'Invoice ID': bill.invoiceid || '',
         'Date': bill.date ? moment(bill.date).format('YYYY-MM-DD') : '',
         'Customer Name': bill.customer_name || '',
         'Contact': bill.contact || '',
