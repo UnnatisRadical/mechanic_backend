@@ -350,22 +350,44 @@ export const deleteAdminAccount = async (req, res) => {
 };
 
 export const updatePremiumStatus = (req, res) => {
-  const { adminId, isPremium } = req.body;
+  const { adminId, subscriptionStatus, subscriptionType, subscriptionExpiryDate, subscriptionStartDate } = req.body;
 
   if (!adminId) {
     return res.status(400).json({ success: false, message: "Admin id required" });
   }
 
   try {
-    db.query("UPDATE admins SET is_premium=? WHERE id=?", [isPremium ? 1 : 0, adminId], (err, result) => {
+    const query = `
+      UPDATE admins 
+      SET subscription_status = ?, 
+          subscription_type = ?, 
+          subscription_expiry_date = ?,
+          subscription_start_date = ?
+      WHERE id = ?
+    `;
+
+    const params = [
+      subscriptionStatus || 'none',
+      subscriptionType || null,
+      subscriptionExpiryDate || null,
+      subscriptionStartDate || null,
+      adminId
+    ];
+
+    db.query(query, params, (err, result) => {
       if (err) {
-        return res.status(500).json({ success: false, message: "Database error" });
+        return res.status(500).json({ success: false, message: "Database error", error: err.message });
       }
-      return res.json({ success: true, message: "Premium updated" });
+
+      return res.json({ success: true, message: "Premium updated", result });
     });
   } catch (error) {
-    return res.json({ success: true, message: "Internal server error" });
+    return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
+};
+
+export const updatePremiumStatusPUT = (req, res) => {
+  return updatePremiumStatus(req, res);
 };
 
 export const updateInvoiceNumberFormat = (req, res) => {
