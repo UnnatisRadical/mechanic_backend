@@ -481,7 +481,6 @@ export const updateBill = async (req, res) => {
 
       db.query(getUpdatedBill, [bill_id], (err, updatedResults) => {
         if (err || updatedResults.length === 0) {
-          console.log("erro", err);
           return res.status(200).json({
             success: true,
             message: "Bill updated successfully",
@@ -833,4 +832,57 @@ export const addService = (req, res) => {
       res.status(201).json({ success: true, id: result.insertId });
     },
   );
+};
+
+export const bulkDeleteBills = async (req, res) => {
+  try {
+    const { admin_id, bill_ids } = req.body;
+
+    if (!admin_id) {
+      return res.status(400).json({
+        error: "Admin ID is required",
+      });
+    }
+
+    if (!Array.isArray(bill_ids) || bill_ids.length === 0) {
+      return res.status(400).json({
+        error: "Bill IDs array is required and must not be empty",
+      });
+    }
+
+    const placeholders = bill_ids.map(() => "?").join(",");
+    const query = `
+      DELETE FROM bills 
+      WHERE bill_id IN (${placeholders}) AND admin_id = ?
+    `;
+
+    const values = [...bill_ids, admin_id];
+
+    db.query(query, values, (err, result) => {
+      if (err) {
+        return res.status(500).json({
+          error: "Database delete failed",
+          details: err,
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          error: "No bills found to delete or unauthorized",
+          deleted: 0,
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `${result.affectedRows} bills deleted successfully`,
+        deleted: result.affectedRows,
+      });
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+    });
+  }
 };

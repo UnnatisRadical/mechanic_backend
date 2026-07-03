@@ -490,3 +490,100 @@ export const deleteCustomer = async (req, res) => {
         return res.status(500).json({ success: false, message: "Internal Server Error" });
     }
 };
+
+export const bulkDeleteCustomers = async (req, res) => {
+    try {
+        const { admin_id, customer_ids } = req.body;
+
+        if (!admin_id || !customer_ids || !Array.isArray(customer_ids) || customer_ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Admin ID and customer IDs array are required",
+            });
+        }
+
+        db.getConnection((connErr, connection) => {
+            if (connErr) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Database connection failed",
+                });
+            }
+
+            connection.beginTransaction((transactionErr) => {
+                if (transactionErr) {
+                    connection.release();
+                    return res.status(500).json({
+                        success: false,
+                        message: "Transaction failed to start",
+                    });
+                }
+
+                const placeholders = customer_ids.map(() => "?").join(",");
+                const deleteVehiclesQuery = `DELETE FROM vehicles WHERE customer_id IN (${placeholders}) AND admin_id = ?`;
+                const vehicleParams = [...customer_ids, admin_id];
+
+                connection.query(deleteVehiclesQuery, vehicleParams, (vehErr) => {
+                    if (vehErr) {
+                        return connection.rollback(() => {
+                            connection.release();
+                            return res.status(500).json({
+                                success: false,
+                                message: "Error deleting related vehicles",
+                            });
+                        });
+                    }
+
+                    const deleteCustomersQuery = `DELETE FROM customers WHERE id IN (${placeholders}) AND admin_id = ?`;
+                    const customerParams = [...customer_ids, admin_id];
+
+                    connection.query(deleteCustomersQuery, customerParams, (custErr, result) => {
+                        if (custErr) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                return res.status(500).json({
+                                    success: false,
+                                    message: "Error deleting customers",
+                                });
+                            });
+                        }
+
+                        if (result.affectedRows === 0) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                return res.status(404).json({
+                                    success: false,
+                                    message: "No customers found or unauthorized",
+                                });
+                            });
+                        }
+
+                        connection.commit((commitErr) => {
+                            if (commitErr) {
+                                return connection.rollback(() => {
+                                    connection.release();
+                                    return res.status(500).json({
+                                        success: false,
+                                        message: "Transaction commit failed",
+                                    });
+                                });
+                            }
+
+                            connection.release();
+                            return res.status(200).json({
+                                success: true,
+                                message: `${result.affectedRows} customers deleted successfully`,
+                                deletedCount: result.affectedRows,
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+        });
+    }
+};

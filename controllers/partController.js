@@ -209,3 +209,48 @@ export const deleteSparePart = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
     }
 };
+
+export const bulkDeleteParts = async (req, res) => {
+    try {
+        const { adminId, part_ids } = req.body;
+
+        if (!adminId || !part_ids || !Array.isArray(part_ids) || part_ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Admin ID and valid part_ids array are required",
+            });
+        }
+
+        const placeholders = part_ids.map(() => "?").join(",");
+        const sql = `DELETE FROM spare_parts WHERE id IN (${placeholders}) AND admin_id = ?`;
+        const params = [...part_ids, adminId];
+
+        db.query(sql, params, (err, result) => {
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Database operation failed",
+                    details: err.message,
+                });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "No parts found or unauthorized access",
+                });
+            }
+
+            res.status(200).json({
+                success: true,
+                message: `${result.affectedRows} parts deleted successfully`,
+                deletedCount: result.affectedRows,
+            });
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal Server Error",
+        });
+    }
+};

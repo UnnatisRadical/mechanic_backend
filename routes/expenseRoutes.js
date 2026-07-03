@@ -4,7 +4,8 @@ import {
   getExpenses,
   getExpenseCategories,
   updateExpense,
-  deleteExpense
+  deleteExpense,
+  bulkDeleteExpenses
 } from "../controllers/expenseController.js";
 
 const router = Router();
@@ -14,5 +15,6 @@ router.get("/expenses", getExpenses);
 router.get("/expense-categories", getExpenseCategories);
 router.put("/expenses/:id", updateExpense);
 router.delete("/expenses/:id", deleteExpense);
+router.post("/expenses/bulk-delete", bulkDeleteExpenses); 
 
 export default router;

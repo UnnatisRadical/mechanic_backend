@@ -152,15 +152,15 @@ export const getExpenseCategories = (req, res) => {
 
 export const updateExpense = (req, res) => {
   const { id } = req.params;
-  
-  const { 
-    payeeName, 
-    expenseName, 
-    amount, 
-    paymentMethod, 
-    status, 
-    description, 
-    date 
+
+  const {
+    payeeName,
+    expenseName,
+    amount,
+    paymentMethod,
+    status,
+    description,
+    date
   } = req.body;
 
   if (!payeeName || !expenseName || amount === undefined || !paymentMethod || !status) {
@@ -188,13 +188,13 @@ export const updateExpense = (req, res) => {
   `;
 
   const queryValues = [
-    payeeName, 
-    expenseName, 
-    dbAmount, 
-    paymentMethod, 
-    status, 
-    dbDescription, 
-    dbDate, 
+    payeeName,
+    expenseName,
+    dbAmount,
+    paymentMethod,
+    status,
+    dbDescription,
+    dbDate,
     id
   ];
 
@@ -250,6 +250,46 @@ export const deleteExpense = (req, res) => {
       res.status(200).json({
         success: true,
         message: "Expense deleted successfully"
+      });
+    }
+  );
+};
+
+export const bulkDeleteExpenses = (req, res) => {
+  const { expense_ids } = req.body;
+
+  if (!expense_ids || !Array.isArray(expense_ids) || expense_ids.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid expense IDs array"
+    });
+  }
+
+  // Create placeholders for SQL query (?, ?, ?)
+  const placeholders = expense_ids.map(() => '?').join(',');
+
+  db.query(
+    `DELETE FROM expenses WHERE id IN (${placeholders})`,
+    expense_ids,
+    (error, result) => {
+      if (error) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete expenses"
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "No expenses found to delete"
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `${result.affectedRows} expense(s) deleted successfully`,
+        deletedCount: result.affectedRows
       });
     }
   );

@@ -13,12 +13,14 @@ import {
   getAllBills,
   getNextInvoiceId,
   getNextInvoiceNumber,
+  bulkDeleteBills,
 } from "../controllers/billController.js";
 
 const router = express.Router();
 
 router.post("/create", createBill);
 router.post("/add-service", addService);
+router.post("/bulk-delete", bulkDeleteBills);
 router.get("/active-services/:admin_id", getActiveServices);
 router.get("/previous-customers/:admin_id", getPreviousCustomers);
 router.get("/all-bills", getAllBills);

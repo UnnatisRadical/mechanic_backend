@@ -172,3 +172,47 @@ export const deleteVehicle = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
     }
 };
+
+export const bulkDeleteVehicles = async (req, res) => {
+    try {
+        const { admin_id, vehicle_ids } = req.body;
+
+        if (!admin_id || !vehicle_ids || !Array.isArray(vehicle_ids) || vehicle_ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Admin ID and vehicle IDs array are required",
+            });
+        }
+
+        const placeholders = vehicle_ids.map(() => "?").join(",");
+        const sql = `DELETE FROM vehicles WHERE id IN (${placeholders}) AND admin_id = ?`;
+        const values = [...vehicle_ids, admin_id];
+
+        db.query(sql, values, (err, result) => {
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Error deleting vehicles",
+                });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "No vehicles found or unauthorized",
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: `${result.affectedRows} vehicles deleted successfully`,
+                deletedCount: result.affectedRows,
+            });
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+        });
+    }
+};

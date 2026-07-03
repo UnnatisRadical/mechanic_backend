@@ -350,40 +350,80 @@ export const deleteAdminAccount = async (req, res) => {
 };
 
 export const updatePremiumStatus = (req, res) => {
-  const { adminId, subscriptionStatus, subscriptionType, subscriptionExpiryDate, subscriptionStartDate } = req.body;
+  const {
+    adminId,
+    subscriptionStatus,
+    subscriptionType,
+    subscriptionExpiryDate,
+    subscriptionStartDate,
+    subscriptionRenewalDate,
+    trialStartedAt,
+    isPremium,
+  } = req.body;
 
   if (!adminId) {
     return res.status(400).json({ success: false, message: "Admin id required" });
   }
 
-  try {
-    const query = `
-      UPDATE admins 
-      SET subscription_status = ?, 
-          subscription_type = ?, 
-          subscription_expiry_date = ?,
-          subscription_start_date = ?
-      WHERE id = ?
-    `;
+  const VALID_STATUSES = [
+    'none',
+    'trial_active',
+    'trial_expired',
+    'premium_active',
+    'premium_expired',
+  ];
 
-    const params = [
-      subscriptionStatus || 'none',
-      subscriptionType || null,
-      subscriptionExpiryDate || null,
-      subscriptionStartDate || null,
-      adminId
-    ];
+  const status = VALID_STATUSES.includes(subscriptionStatus)
+    ? subscriptionStatus
+    : 'none';
 
-    db.query(query, params, (err, result) => {
-      if (err) {
-        return res.status(500).json({ success: false, message: "Database error", error: err.message });
-      }
+  const premiumFlag =
+    isPremium !== undefined
+      ? isPremium ? 1 : 0
+      : (status === 'trial_active' || status === 'premium_active') ? 1 : 0;
 
-      return res.json({ success: true, message: "Premium updated", result });
+  const query = `
+    UPDATE admins SET
+      is_premium = ?,
+      subscription_status = ?,
+      subscription_type = ?,
+      subscription_start_date = ?,
+      subscription_expiry_date = ?,
+      subscription_renewal_date = ?,
+      trial_started_at = ?
+    WHERE id = ?
+  `;
+
+  const params = [
+    premiumFlag,
+    status,
+    subscriptionType || null,
+    subscriptionStartDate || null,
+    subscriptionExpiryDate || null,
+    subscriptionRenewalDate || null,
+    trialStartedAt || null,
+    adminId,
+  ];
+
+  db.query(query, params, (err, result) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Premium status updated",
+      data: { subscriptionStatus: status, isPremium: premiumFlag },
     });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
-  }
+  });
 };
 
 export const updatePremiumStatusPUT = (req, res) => {
@@ -409,13 +449,11 @@ export const updateInvoiceNumberFormat = (req, res) => {
   try {
     db.query("UPDATE admins SET invoice_format = ? WHERE id = ?", [invoiceFormatJSON, adminId], (err, result) => {
       if (err) {
-        console.log("err", err);
         return res.status(500).json({ success: false, message: "Database error" });
       }
       return res.json({ success: true, message: "Invoice format updated" });
     });
   } catch (error) {
-    console.log("error", error);
     return res.json({ success: true, message: "Internal server error" });
   }
 };
