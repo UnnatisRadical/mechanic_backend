@@ -118,6 +118,7 @@ export const createBill = async (req, res) => {
       other_charges,
       discount,
       received,
+      balance,
       total_bill,
       date,
       tax_details,
@@ -195,8 +196,6 @@ export const createBill = async (req, res) => {
       subtotalBeforeTax > 0
         ? subtotalBeforeTax + (subtotalBeforeTax * (tax_rate || 0)) / 100
         : 0;
-
-    const balance = totalWithTax - received;
 
     const utcDate = new Date(date);
     const istOffset = 5.5 * 60 * 60 * 1000;
