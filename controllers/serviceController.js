@@ -5,36 +5,20 @@ export const addService = async (req, res) => {
     const {
       name,
       category,
-      description,
-      duration,
-      vehicle_type,
       price_2w,
       price_4w,
-      status,
       admin_id,
     } = req.body;
 
-    if (!name || !category || !vehicle_type || !status || !admin_id) {
-      return res
-        .status(400)
-        .json({ error: "All required fields must be filled" });
+    if (!name || !category || !admin_id) {
+      return res.status(400).json({ error: "All required fields must be filled" });
     }
 
-    if (
-      (vehicle_type === "2 Wheeler" || vehicle_type === "Both") &&
-      !price_2w
-    ) {
-      return res.status(400).json({ error: "2 Wheeler price is required" });
-    }
-    if (
-      (vehicle_type === "4 Wheeler" || vehicle_type === "Both") &&
-      !price_4w
-    ) {
-      return res.status(400).json({ error: "4 Wheeler price is required" });
+    if (!price_2w && !price_4w) {
+      return res.status(400).json({ error: "At least one price (2W or 4W) is required" });
     }
 
-    const checkQuery =
-      "SELECT * FROM services WHERE name = ? AND admin_id = ? AND status = 'active'";
+    const checkQuery = "SELECT * FROM services WHERE name = ? AND admin_id = ?";
     db.query(checkQuery, [name, admin_id], (err, results) => {
       if (err)
         return res.status(500).json({ error: "Database error", details: err });
@@ -43,22 +27,13 @@ export const addService = async (req, res) => {
         return res.status(400).json({ error: "Service already exists" });
       }
 
-      const insertQuery = `
-        INSERT INTO services 
-          (name, category, description, duration, vehicle_type, price_2w, price_4w, status, admin_id)
-        VALUES 
-          (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
+      const insertQuery = `INSERT INTO services (name, category, price_2w, price_4w, admin_id) VALUES (?, ?, ?, ?, ?)`;
 
       const values = [
         name,
         category,
-        description || null,
-        duration || null,
-        vehicle_type,
-        price_2w || null,
-        price_4w || null,
-        status.toLowerCase(),
+        price_2w,
+        price_4w,
         admin_id,
       ];
 
@@ -165,70 +140,38 @@ export const editService = (req, res) => {
     id,
     name,
     category,
-    description,
-    duration,
-    vehicle_type,
     price_2w,
     price_4w,
-    status,
     admin_id,
   } = req.body;
 
   try {
-    if (!id || !name || !vehicle_type || !admin_id) {
+    if (!id || !name || !admin_id) {
       return res.status(400).json({
         success: false,
-        message:
-          "Missing required fields (id, name, vehicle_type, or admin_id)",
+        message: "Missing required fields (id, name, or admin_id)",
       });
     }
 
-    if (
-      (vehicle_type === "2 Wheeler" || vehicle_type === "Both") &&
-      !price_2w
-    ) {
+    if (!price_2w && !price_4w) {
       return res
         .status(400)
-        .json({ success: false, message: "2 Wheeler price is required" });
-    }
-    if (
-      (vehicle_type === "4 Wheeler" || vehicle_type === "Both") &&
-      !price_4w
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "4 Wheeler price is required" });
+        .json({ success: false, message: "At least one price (2W or 4W) is required" });
     }
 
-    const queryText = `
-      UPDATE services SET
-        name        = ?,
-        category    = ?,
-        description = ?,
-        duration    = ?,
-        vehicle_type = ?,
-        price_2w    = ?,
-        price_4w    = ?,
-        status      = ?
-      WHERE id = ? AND admin_id = ?
-    `;
+    const queryText = `UPDATE services SET name = ?, category = ?, price_2w = ?, price_4w = ? WHERE id = ? AND admin_id = ?`;
 
     const queryValues = [
       name,
       category,
-      description || null,
-      duration || null,
-      vehicle_type,
-      price_2w || null,
-      price_4w || null,
-      status,
+      price_2w,
+      price_4w,
       id,
       admin_id,
     ];
 
     db.query(queryText, queryValues, (error, results) => {
       if (error) {
-        console.error("Database Error:", error);
         return res
           .status(500)
           .json({ success: false, message: "Database operation failed" });
@@ -247,7 +190,6 @@ export const editService = (req, res) => {
         .json({ success: true, message: "Service updated successfully" });
     });
   } catch (error) {
-    console.error("editService error:", error);
     return res.status(500).json({ success: false, message: error?.message });
   }
 };

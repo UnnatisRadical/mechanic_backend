@@ -56,7 +56,6 @@ const generateInvoiceNumber = (lastInvoiceNo, settings, currentDate = new Date()
           return { serial: 0, month: null, year: null };
       }
     } catch (err) {
-      console.error("❌ Error parsing invoice number:", err);
       return { serial: 0, month: null, year: null };
     }
   };
@@ -258,7 +257,7 @@ export const createBill = async (req, res) => {
 export const getActiveServices = (req, res) => {
   const { admin_id } = req.params;
   db.query(
-    "SELECT * FROM services WHERE admin_id = ? AND status = 'active'",
+    "SELECT * FROM services WHERE admin_id = ?",
     [admin_id],
     (err, results) => {
       if (err) return res.status(500).json(err);
@@ -751,7 +750,6 @@ export const getNextInvoiceNumber = (req, res) => {
 
   db.query(lastInvoiceQuery, [admin_id], (err, invoiceResults) => {
     if (err) {
-      console.error("❌ Database query failed:", err);
       return res.status(500).json({
         success: false,
         error: "Database query failed",
@@ -809,19 +807,17 @@ export const getNextInvoiceId = (req, res) => {
 export const addService = (req, res) => {
   const { admin_id, name, vehicle_type, price_2w, price_4w, status } = req.body;
 
-  if (!admin_id || !name || !vehicle_type) {
+  if (!admin_id || !name) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
   db.query(
-    "INSERT INTO services (admin_id, name, vehicle_type, price_2w, price_4w, status) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO services (admin_id, name, price_2w, price_4w) VALUES (?, ?, ?, ?)",
     [
       admin_id,
       name,
-      vehicle_type,
       price_2w || 0,
       price_4w || 0,
-      status || "active",
     ],
     (err, result) => {
       if (err)

@@ -123,7 +123,7 @@ export const getDashboardData = async (req, res) => {
 
     const [rawServices] = await connection.query(serviceQuery, queryParams);
     const [activeServices] = await connection.query(
-      `SELECT name FROM services WHERE admin_id = ? AND status = 'active'`,
+      `SELECT name FROM services WHERE admin_id = ?`,
       [admin_id]
     );
 
@@ -160,7 +160,6 @@ export const getDashboardData = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Dashboard error:", error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (connection) connection.release();
