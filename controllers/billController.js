@@ -12,96 +12,6 @@ function tryParseJSON(jsonString) {
   }
 }
 
-const generateInvoiceNumber = (lastInvoiceNo, settings, currentDate = new Date()) => {
-  const { prefix = "INV", format = "prefix_year_serial", digits = "2", resetType = "never" } = settings;
-
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = String(currentDate.getMonth() + 1).padStart(2, "0");
-
-  const parseLastInvoice = (invoiceNo) => {
-    if (!invoiceNo) return { serial: 0, month: null, year: null };
-
-    try {
-      const parts = invoiceNo.split("-");
-
-      switch (format) {
-        case "serial_only":
-          return { serial: parseInt(parts[0], 10) || 0, month: null, year: null };
-
-        case "prefix_serial":
-          return { serial: parseInt(parts[parts.length - 1], 10) || 0, month: null, year: null };
-
-        case "year_serial":
-          return {
-            serial: parseInt(parts[1], 10) || 0,
-            month: null,
-            year: parseInt(parts[0], 10) || currentYear
-          };
-
-        case "prefix_year_serial":
-          return {
-            serial: parseInt(parts[2], 10) || 0,
-            month: null,
-            year: parseInt(parts[1], 10) || currentYear
-          };
-
-        case "prefix_month_year_serial":
-          return {
-            serial: parseInt(parts[3], 10) || 0,
-            month: parseInt(parts[1], 10) || currentMonth,
-            year: parseInt(parts[2], 10) || currentYear
-          };
-
-        default:
-          return { serial: 0, month: null, year: null };
-      }
-    } catch (err) {
-      return { serial: 0, month: null, year: null };
-    }
-  };
-
-  let shouldReset = false;
-  if (resetType === "never") {
-    shouldReset = false;
-  } else if (resetType === "year") {
-    shouldReset = parsed.year !== currentYear;
-  } else if (resetType === "month") {
-    shouldReset = parsed.year !== currentYear || parsed.month !== currentMonth;
-  }
-
-  const nextSerial = shouldReset ? 1 : (parsed.serial + 1);
-  const paddedSerial = String(nextSerial).padStart(parseInt(digits, 10), "0");
-
-  let generatedInvoiceNo = "";
-
-  switch (format) {
-    case "serial_only":
-      generatedInvoiceNo = paddedSerial;
-      break;
-
-    case "prefix_serial":
-      generatedInvoiceNo = `${prefix}-${paddedSerial}`;
-      break;
-
-    case "year_serial":
-      generatedInvoiceNo = `${currentYear}-${paddedSerial}`;
-      break;
-
-    case "prefix_year_serial":
-      generatedInvoiceNo = `${prefix}-${currentYear}-${paddedSerial}`;
-      break;
-
-    case "prefix_month_year_serial":
-      generatedInvoiceNo = `${prefix}-${currentMonth}-${currentYear}-${paddedSerial}`;
-      break;
-
-    default:
-      generatedInvoiceNo = `${prefix}-${currentYear}-${paddedSerial}`;
-  }
-
-  return generatedInvoiceNo;
-};
-
 export const createBill = async (req, res) => {
   try {
     let {
@@ -121,7 +31,7 @@ export const createBill = async (req, res) => {
       total_bill,
       date,
       tax_details,
-      payment_status,
+      payment_type,
       payment_method,
       invoice_no,
     } = req.body;
@@ -130,6 +40,7 @@ export const createBill = async (req, res) => {
       !admin_id ||
       !customer_name ||
       !contact ||
+      !payment_type ||
       (service_taken.length === 0 && parts_taken.length === 0)
     ) {
       return res.status(400).json({
@@ -158,22 +69,6 @@ export const createBill = async (req, res) => {
     if (!["cash", "online"].includes(payment_method))
       return res.status(400).json({ error: "Invalid payment method" });
 
-    if (['paid', 'partial'].includes(payment_status)) {
-      if (received <= 0) {
-        return res.status(400).json({
-          error: `Received or Partial amount must be greater than 0 for ${payment_status} payment.`
-        });
-      }
-
-      if (!['cash', 'online'].includes(payment_method)) {
-        return res.status(400).json({
-          error: "Payment method is required and must be 'cash' or 'online' for paid/partial status."
-        });
-      }
-    } else {
-      payment_method = null;
-    }
-
     const serviceTotal = service_taken.reduce(
       (sum, service) => sum + parseFloat(service.price || 0),
       0,
@@ -183,8 +78,7 @@ export const createBill = async (req, res) => {
       0,
     );
 
-    const subtotalBeforeTax =
-      serviceTotal + partsTotal + other_charges - discount;
+    const subtotalBeforeTax = serviceTotal + partsTotal + other_charges - discount;
     if (subtotalBeforeTax < 0)
       return res.status(400).json({
         error: "Discount cannot exceed items total plus other charges",
@@ -207,48 +101,109 @@ export const createBill = async (req, res) => {
       ? JSON.stringify(vehicle_details)
       : null;
 
-    const insertQuery = `
-      INSERT INTO bills 
-        (admin_id, cust_id, customer_name, contact, customer_email, customer_address, vehicle_details, service_taken, parts_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_status, payment_method, invoiceid)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
 
-    const values = [
-      admin_id,
-      custId,
-      customer_name,
-      contact,
-      customer_email || null,
-      customer_address || null,
-      vehicleDetailsFormatted,
-      serviceTakenFormatted,
-      partsTakenFormatted,
-      other_charges,
-      discount,
-      received,
-      balance,
-      total_bill,
-      date,
-      tax_rate,
-      payment_status,
-      payment_method,
-      invoice_no,
-    ];
+    const handleVehicleRegistration = () => {
+      return new Promise((resolve, reject) => {
+        const vehicleNumber = (vehicle_details?.vehicleNumber || vehicle_details?.vehicle_number)?.toUpperCase();
 
+        if (!vehicle_details || !vehicleNumber) {
+          return resolve(null);
+        }
 
-    db.query(insertQuery, values, (err, result) => {
-      if (err) {
+        const checkVehicleQuery = `SELECT id FROM vehicles WHERE vehicle_number = ? AND admin_id = ?`;
+
+        db.query(checkVehicleQuery, [vehicleNumber, admin_id], (err, results) => {
+          if (err) {
+            return reject(err);
+          }
+
+          if (results && results.length > 0) {
+            return resolve(results[0].id);
+          }
+
+          const insertVehicleQuery = `INSERT INTO vehicles 
+        (admin_id, customer_id, brand, model, vehicle_number, manufacturing_year, vehicle_type, fuel_type) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+          const vehicleValues = [
+            admin_id,
+            custId,
+            vehicle_details.brand || "NA",
+            vehicle_details.model || "NA",
+            vehicleNumber,
+            vehicle_details.manufacturing_year || vehicle_details.year || null,
+            vehicle_details.vehicle_type || vehicle_details.type || "Car",
+            vehicle_details.fuel_type || "Petrol",
+          ];
+
+          db.query(insertVehicleQuery, vehicleValues, (err, result) => {
+            if (err) {
+              if (err.code === "ER_DUP_ENTRY") {
+                db.query(checkVehicleQuery, [vehicleNumber, admin_id], (err, results) => {
+                  if (err) return reject(err);
+                  return resolve(results && results.length > 0 ? results[0].id : null);
+                });
+              } else {
+                return reject(err);
+              }
+            } else {
+              return resolve(result.insertId);
+            }
+          });
+        });
+      });
+    };
+
+    handleVehicleRegistration()
+      .then((vehicleId) => {
+        const insertQuery = `
+          INSERT INTO bills 
+            (admin_id, cust_id, customer_name, contact, customer_email, customer_address, vehicle_details, service_taken, parts_taken, other_charges, discount, received, balance, total_bill, date, tax_rate, payment_type, payment_method, invoiceid)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const values = [
+          admin_id,
+          custId,
+          customer_name,
+          contact,
+          customer_email || null,
+          customer_address || null,
+          vehicleDetailsFormatted,
+          serviceTakenFormatted,
+          partsTakenFormatted,
+          other_charges,
+          discount,
+          received,
+          balance,
+          total_bill,
+          date,
+          tax_rate,
+          payment_type,
+          payment_method,
+          invoice_no,
+        ];
+
+        db.query(insertQuery, values, (err, result) => {
+          if (err) {
+            return res
+              .status(500)
+              .json({ error: "Database insert failed", details: err });
+          }
+          res.status(201).json({
+            success: true,
+            message: "Bill created successfully",
+            bill_id: result.insertId,
+            invoiceid: invoice_no,
+            vehicleId: vehicleId,
+          });
+        });
+      })
+      .catch((error) => {
         return res
           .status(500)
-          .json({ error: "Database insert failed", details: err });
-      }
-      res.status(201).json({
-        success: true,
-        message: "Bill created successfully",
-        bill_id: result.insertId,
-        invoiceid: invoice_no,
+          .json({ error: "Vehicle registration failed", details: error.message });
       });
-    });
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
   }
@@ -297,7 +252,6 @@ export const updateBill = async (req, res) => {
       received,
       total_bill,
       tax_rate,
-      payment_status,
       payment_method,
     } = req.body;
 
@@ -351,23 +305,6 @@ export const updateBill = async (req, res) => {
       });
     }
 
-    if (["paid", "partial"].includes(payment_status)) {
-      if (received <= 0) {
-        return res.status(400).json({
-          error: `Received amount must be greater than 0 for ${payment_status} payment.`,
-        });
-      }
-
-      if (!["cash", "online"].includes(payment_method)) {
-        return res.status(400).json({
-          error:
-            "Payment method is required and must be 'cash' or 'online' for paid/partial payment.",
-        });
-      }
-    } else {
-      payment_method = null;
-    }
-
     const serviceTotal = service_taken.reduce(
       (sum, service) => sum + parseFloat(service.price || 0),
       0
@@ -379,14 +316,11 @@ export const updateBill = async (req, res) => {
       0
     );
 
-    const subtotalBeforeTax =
-      serviceTotal + partsTotal + other_charges - discount;
-
-    if (subtotalBeforeTax < 0) {
+    const subtotalBeforeTax = serviceTotal + partsTotal + other_charges - discount;
+    if (subtotalBeforeTax < 0)
       return res.status(400).json({
         error: "Discount cannot exceed items total plus other charges",
       });
-    }
 
     const liveTaxRate = parseFloat(tax_rate) || 0;
 
@@ -433,7 +367,6 @@ export const updateBill = async (req, res) => {
         balance = ?,
         total_bill = ?,
         tax_rate = ?,
-        payment_status = ?,
         payment_method = ?,
         date = COALESCE(?, date)
       WHERE invoiceid = ? AND admin_id = ?
@@ -453,7 +386,6 @@ export const updateBill = async (req, res) => {
       computedBalance,
       total_bill,
       liveTaxRate,
-      payment_status,
       payment_method,
       date,
       invoiceNo,

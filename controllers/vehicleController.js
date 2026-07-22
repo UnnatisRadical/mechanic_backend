@@ -10,7 +10,6 @@ export const registerVehicle = async (req, res) => {
             vehicleNumber,
             year,
             type,
-            serviceHistory,
         } = req.body;
 
         if (!adminId || !customerId || !vehicleNumber) {
@@ -21,8 +20,8 @@ export const registerVehicle = async (req, res) => {
         }
 
         const sql = `INSERT INTO vehicles 
-            (admin_id, customer_id, brand, model, vehicle_number, manufacturing_year, vehicle_type, service_history) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+            (admin_id, customer_id, brand, model, vehicle_number, manufacturing_year, vehicle_type) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)`;
         const values = [
             adminId,
             customerId,
@@ -31,7 +30,6 @@ export const registerVehicle = async (req, res) => {
             vehicleNumber.toUpperCase(),
             year || null,
             type || "",
-            serviceHistory || "",
         ];
 
         db.query(sql, values, (err, result) => {
@@ -78,7 +76,7 @@ export const getVehicles = async (req, res) => {
 export const getAllVehicles = async (req, res) => {
     try {
         const { adminId } = req.params;
-        const sql = "SELECT * FROM vehicles";
+        const sql = "SELECT * FROM vehicles WHERE admin_id = ?";
 
         db.query(sql, [adminId], (err, results) => {
             if (err)
