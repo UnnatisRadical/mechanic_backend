@@ -66,8 +66,6 @@ export const createBill = async (req, res) => {
       return res.status(400).json({ error: "Invalid total bill" });
     if (!date || isNaN(new Date(date)))
       return res.status(400).json({ error: "Invalid date" });
-    if (!["cash", "online"].includes(payment_method))
-      return res.status(400).json({ error: "Invalid payment method" });
 
     const serviceTotal = service_taken.reduce(
       (sum, service) => sum + parseFloat(service.price || 0),

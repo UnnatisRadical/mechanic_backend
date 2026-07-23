@@ -9,28 +9,22 @@ export const addSparePart = async (req, res) => {
             categoryName,
             brand,
             description,
-            costPrice,
+            buyPrice,
             sellingPrice,
-            mrp,
-            stockQuantity,
-            lowStockThreshold,
-            location,
-            unit,
-            supplierName,
             status,
         } = req.body;
 
-        if (!adminId || !name || !costPrice) {
+        if (!adminId || !name || !sku || !categoryName || !buyPrice || !sellingPrice) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Required fields (Name, SKU, Category Name, Quantity, Unit Price) are missing or invalid",
+                    "Required fields (Name, SKU, Category, Buy and Selling Price) are missing or invalid",
             });
         }
 
         const sql = `INSERT INTO spare_parts (
-            admin_id, name, sku, category_name, brand, description, cost_price, selling_price, mrp, stock_quantity, low_stock_threshold, location, unit, supplier_name, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            admin_id, name, sku, category_name, brand, description, buy_price, selling_price, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const values = [
             adminId,
@@ -39,14 +33,8 @@ export const addSparePart = async (req, res) => {
             categoryName?.trim() || "General",
             brand || null,
             description || null,
-            parseFloat(costPrice) || 0.0,
+            parseFloat(buyPrice) || 0.0,
             parseFloat(sellingPrice) || 0.0,
-            mrp ? parseFloat(mrp) : null,
-            parseInt(stockQuantity) || 0,
-            lowStockThreshold !== undefined ? parseInt(lowStockThreshold) : 5,
-            location || null,
-            unit || "Pcs",
-            supplierName || null,
             status || "active",
         ];
 
