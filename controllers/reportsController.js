@@ -12,16 +12,10 @@ function tryParseJSON(jsonString) {
   }
 }
 
-function normalizeStatus(status, paidAmount, dueAmount) {
-  const value = String(status || '').trim().toLowerCase();
-
-  if (value === 'paid') return 'Paid';
-  if (value === 'partial') return 'Partial';
-  if (value === 'unpaid') return 'Unpaid';
-  if (value === 'overdue') return 'Overdue';
-
+function normalizeStatus(totalAmount, dueAmount) {
   if (dueAmount <= 0) return 'Paid';
-  if (paidAmount > 0) return 'Partial';
+  if (dueAmount > 0 && dueAmount < totalAmount) return 'Partial';
+  if (dueAmount === totalAmount) return 'Unpaid';
   return 'Unpaid';
 }
 
@@ -52,7 +46,7 @@ export const getCustomerBills = async (req, res) => {
         total_bill: parseFloat(bill.total_bill) || 0,
         paid_amount: parseFloat(bill.received) || 0,
         due_amount: parseFloat(bill.balance) || 0,
-        status: normalizeStatus(bill.payment_status, parseFloat(bill.received) || 0, parseFloat(bill.balance) || 0),
+        status: normalizeStatus(parseFloat(bill.total_bill) || 0, parseFloat(bill.balance) || 0),
         tax_rate: bill.tax_rate ? parseFloat(bill.tax_rate) : null,
         payment_method: bill.payment_method || 'cash'
       }));
@@ -79,7 +73,7 @@ export const getReports = async (req, res) => {
     const query = `
       SELECT 
         bill_id,
-        invoiceid, -- Agar aapke table me ye alag column hai to, nahi to is line ko hata sakte hain
+        invoiceid,
         customer_name,
         contact,
         service_taken,
@@ -88,9 +82,9 @@ export const getReports = async (req, res) => {
         received,
         balance,
         total_bill as total_amount,
-        payment_status,
+        payment_type,
         payment_method,
-        date -- THIS WAS MISSING
+        date
       FROM bills
       WHERE admin_id = ?
       ORDER BY date DESC
@@ -111,7 +105,7 @@ export const getReports = async (req, res) => {
         paid_amount: parseFloat(item.received) || 0,
         due_amount: parseFloat(item.balance) || 0,
         total_amount: parseFloat(item.total_amount) || 0,
-        status: normalizeStatus(item.payment_status, parseFloat(item.received) || 0, parseFloat(item.balance) || 0),
+        status: normalizeStatus(parseFloat(item.total_amount) || 0, parseFloat(item.balance) || 0),
         tax_rate: item.tax_rate ? parseFloat(item.tax_rate) : null,
         date: item.date || null,
         payment_method: item.payment_method || 'cash'
