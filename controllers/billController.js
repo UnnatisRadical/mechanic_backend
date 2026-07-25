@@ -56,8 +56,6 @@ export const createBill = async (req, res) => {
         .status(400)
         .json({ error: "Vehicle details cannot be empty." });
     }
-    if (typeof other_charges !== "number" || other_charges < 0)
-      return res.status(400).json({ error: "Invalid other charges" });
     if (typeof discount !== "number" || discount < 0)
       return res.status(400).json({ error: "Invalid discount" });
     if (typeof received !== "number" || received < 0)
@@ -98,7 +96,7 @@ export const createBill = async (req, res) => {
     const vehicleDetailsFormatted = vehicle_details
       ? JSON.stringify(vehicle_details)
       : null;
-
+    const otherChargesFormatted = JSON.stringify(other_charges || []);
 
     const handleVehicleRegistration = () => {
       return new Promise((resolve, reject) => {
@@ -170,7 +168,7 @@ export const createBill = async (req, res) => {
           vehicleDetailsFormatted,
           serviceTakenFormatted,
           partsTakenFormatted,
-          other_charges,
+          otherChargesFormatted,
           discount,
           received,
           balance,
@@ -245,15 +243,13 @@ export const updateBill = async (req, res) => {
       vehicle_details,
       service_taken,
       parts_taken,
-      other_charges = 0,
+      other_charges,
       discount,
       received,
       total_bill,
       tax_rate,
       payment_method,
     } = req.body;
-
-    const safeOtherCharges = parseFloat(other_charges) || 0;
 
     if (!Array.isArray(service_taken)) service_taken = [];
 
@@ -335,6 +331,7 @@ export const updateBill = async (req, res) => {
     const vehicleDetailsFormatted = vehicle_details
       ? JSON.stringify(vehicle_details)
       : null;
+    const otherChargesFormatted = JSON.stringify(other_charges || []);
 
     let date = null;
 
@@ -378,7 +375,7 @@ export const updateBill = async (req, res) => {
       vehicleDetailsFormatted,
       serviceTakenFormatted,
       partsTakenFormatted,
-      safeOtherCharges,
+      otherChargesFormatted,
       discount,
       received,
       computedBalance,
