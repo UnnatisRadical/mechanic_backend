@@ -73,19 +73,48 @@ export const googleSignIn = async (req, res) => {
 };
 
 export const getAdminById = (req, res) => {
-  const adminId = req.params.id;
+  const { id } = req.params;
 
-  db.query(
-    "SELECT * FROM admins WHERE id = ?",
-    [adminId],
-    (err, result) => {
-      if (err) return res.status(500).json({ message: "Database error" });
-      if (result.length === 0)
-        return res.status(404).json({ message: "Admin not found" });
+  if (!id) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
 
-      res.json(result[0]);
-    },
-  );
+  const query = `SELECT * FROM admins WHERE id = ?`;
+
+  db.query(query, [id], (err, result) => {
+    if (err) {
+      console.log('Get admin error:', err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+
+    const admin = result[0];
+
+    if (admin.subscription_start_date) {
+      admin.subscription_start_date = new Date(admin.subscription_start_date).toISOString();
+    }
+    if (admin.subscription_expiry_date) {
+      admin.subscription_expiry_date = new Date(admin.subscription_expiry_date).toISOString();
+    }
+    if (admin.subscription_renewal_date) {
+      admin.subscription_renewal_date = new Date(admin.subscription_renewal_date).toISOString();
+    }
+    if (admin.trial_started_at) {
+      admin.trial_started_at = new Date(admin.trial_started_at).toISOString();
+    }
+
+    return res.json({
+      success: true,
+      data: admin,
+    });
+  });
 };
 
 export const updateAdmin = async (req, res) => {
@@ -378,9 +407,23 @@ export const updatePremiumStatus = (req, res) => {
     : 'none';
 
   const premiumFlag =
-    isPremium !== undefined
-      ? isPremium ? 1 : 0
-      : (status === 'trial_active' || status === 'premium_active') ? 1 : 0;
+    status === 'trial_active' || status === 'premium_active' ? 1 : 0;
+
+  const startDate = subscriptionStartDate
+    ? new Date(subscriptionStartDate).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const expiryDate = subscriptionExpiryDate
+    ? new Date(subscriptionExpiryDate).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const renewalDate = subscriptionRenewalDate
+    ? new Date(subscriptionRenewalDate).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const trialDate = trialStartedAt
+    ? new Date(trialStartedAt).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
 
   const query = `
     UPDATE admins SET
@@ -398,15 +441,16 @@ export const updatePremiumStatus = (req, res) => {
     premiumFlag,
     status,
     subscriptionType || null,
-    subscriptionStartDate || null,
-    subscriptionExpiryDate || null,
-    subscriptionRenewalDate || null,
-    trialStartedAt || null,
+    startDate,
+    expiryDate,
+    renewalDate,
+    trialDate,
     adminId,
   ];
 
   db.query(query, params, (err, result) => {
     if (err) {
+      console.error('Premium update error:', err);
       return res.status(500).json({
         success: false,
         message: "Database error",
@@ -421,7 +465,11 @@ export const updatePremiumStatus = (req, res) => {
     return res.json({
       success: true,
       message: "Premium status updated",
-      data: { subscriptionStatus: status, isPremium: premiumFlag },
+      data: {
+        subscriptionStatus: status,
+        isPremium: premiumFlag,
+        adminId
+      },
     });
   });
 };
@@ -456,4 +504,179 @@ export const updateInvoiceNumberFormat = (req, res) => {
   } catch (error) {
     return res.json({ success: true, message: "Internal server error" });
   }
+};
+
+export const getSubscriptionAnalytics = (req, res) => {
+  const query = `
+    SELECT 
+      COUNT(*) as total_users,
+      SUM(CASE WHEN subscription_status = 'trial_active' THEN 1 ELSE 0 END) as active_trial_users,
+      SUM(CASE WHEN subscription_status = 'premium_active' THEN 1 ELSE 0 END) as active_premium_users,
+      SUM(CASE WHEN subscription_status = 'trial_expired' THEN 1 ELSE 0 END) as expired_trial_users,
+      SUM(CASE WHEN subscription_status = 'premium_expired' THEN 1 ELSE 0 END) as expired_premium_users,
+      SUM(CASE WHEN subscription_status = 'none' THEN 1 ELSE 0 END) as no_subscription_users
+    FROM admins
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error('Analytics error:', err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result[0],
+    });
+  });
+};
+
+export const getFreeTrialUsers = (req, res) => {
+  const query = `
+    SELECT 
+      id,
+      shop_name,
+      email,
+      contact,
+      subscription_status,
+      subscription_start_date,
+      subscription_expiry_date,
+      trial_started_at,
+      created_at
+    FROM admins 
+    WHERE subscription_status = 'trial_active'
+    ORDER BY trial_started_at DESC
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error('Get trial users error:', err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    const formattedResult = result.map(user => ({
+      ...user,
+      subscription_start_date: user.subscription_start_date
+        ? new Date(user.subscription_start_date).toISOString()
+        : null,
+      subscription_expiry_date: user.subscription_expiry_date
+        ? new Date(user.subscription_expiry_date).toISOString()
+        : null,
+      trial_started_at: user.trial_started_at
+        ? new Date(user.trial_started_at).toISOString()
+        : null,
+    }));
+
+    return res.json({
+      success: true,
+      count: result.length,
+      data: formattedResult,
+    });
+  });
+};
+
+export const getPremiumUsers = (req, res) => {
+  const query = `
+    SELECT 
+      id,
+      shop_name,
+      email,
+      contact,
+      subscription_status,
+      subscription_type,
+      subscription_start_date,
+      subscription_expiry_date,
+      subscription_renewal_date,
+      created_at
+    FROM admins 
+    WHERE subscription_status = 'premium_active'
+    ORDER BY subscription_start_date DESC
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error('Get premium users error:', err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    const formattedResult = result.map(user => ({
+      ...user,
+      subscription_start_date: user.subscription_start_date
+        ? new Date(user.subscription_start_date).toISOString()
+        : null,
+      subscription_expiry_date: user.subscription_expiry_date
+        ? new Date(user.subscription_expiry_date).toISOString()
+        : null,
+      subscription_renewal_date: user.subscription_renewal_date
+        ? new Date(user.subscription_renewal_date).toISOString()
+        : null,
+    }));
+
+    return res.json({
+      success: true,
+      count: result.length,
+      data: formattedResult,
+    });
+  });
+};
+
+export const getExpiredSubscriptions = (req, res) => {
+  const query = `
+    SELECT 
+      id,
+      shop_name,
+      email,
+      contact,
+      subscription_status,
+      subscription_type,
+      subscription_start_date,
+      subscription_expiry_date,
+      trial_started_at,
+      created_at
+    FROM admins 
+    WHERE subscription_status IN ('trial_expired', 'premium_expired')
+    ORDER BY subscription_expiry_date DESC
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error('Get expired subscriptions error:', err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    const formattedResult = result.map(user => ({
+      ...user,
+      subscription_start_date: user.subscription_start_date
+        ? new Date(user.subscription_start_date).toISOString()
+        : null,
+      subscription_expiry_date: user.subscription_expiry_date
+        ? new Date(user.subscription_expiry_date).toISOString()
+        : null,
+      trial_started_at: user.trial_started_at
+        ? new Date(user.trial_started_at).toISOString()
+        : null,
+    }));
+
+    return res.json({
+      success: true,
+      count: result.length,
+      data: formattedResult,
+    });
+  });
 };
