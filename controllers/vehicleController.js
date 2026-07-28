@@ -25,11 +25,11 @@ export const registerVehicle = async (req, res) => {
         const values = [
             adminId,
             customerId,
-            brand || "NA",
-            model || "NA",
+            brand,
+            model,
             vehicleNumber.toUpperCase(),
-            year || null,
-            type || "",
+            year,
+            type,
         ];
 
         db.query(sql, values, (err, result) => {

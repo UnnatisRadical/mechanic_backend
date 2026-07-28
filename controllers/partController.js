@@ -14,11 +14,11 @@ export const addSparePart = async (req, res) => {
             status,
         } = req.body;
 
-        if (!adminId || !name || !sku || !categoryName || !buyPrice || !sellingPrice) {
+        if (!adminId || !name || !categoryName || !buyPrice || !sellingPrice) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Required fields (Name, SKU, Category, Buy and Selling Price) are missing or invalid",
+                    "Required fields (Name, Category, Buy and Selling Price) are missing or invalid",
             });
         }
 
@@ -29,8 +29,8 @@ export const addSparePart = async (req, res) => {
         const values = [
             adminId,
             name,
-            sku || `SKU-${Date.now()}`,
-            categoryName?.trim() || "General",
+            sku,
+            categoryName?.trim(),
             brand || null,
             description || null,
             parseFloat(buyPrice) || 0.0,
@@ -94,14 +94,8 @@ export const updateSparePart = async (req, res) => {
             categoryName,
             brand,
             description,
-            stockQuantity,
-            costPrice,
+            buyPrice,
             sellingPrice,
-            mrp,
-            lowStockThreshold,
-            location,
-            unit,
-            supplierName,
             status,
         } = req.body;
 
@@ -111,37 +105,25 @@ export const updateSparePart = async (req, res) => {
                 .json({ success: false, message: "Admin authentication failed" });
         }
 
-        if (
-            !name ||
-            !sku ||
-            !categoryName ||
-            stockQuantity === undefined ||
-            !costPrice
-        ) {
+        if (!name || !categoryName || !buyPrice || !sellingPrice) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Required fields (Name, SKU, Category, Quantity, Cost Price) are missing",
+                    "Required fields (Name, Category, Buy and Selling Price) are missing or invalid",
             });
         }
 
-        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, stock_quantity = ?, cost_price = ?, selling_price = ?, mrp = ?, low_stock_threshold = ?, location = ?, unit = ?, supplier_name = ?, status = ? WHERE id = ? AND admin_id = ?`;
+        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, buy_price = ?, selling_price = ?, status = ? WHERE id = ? AND admin_id = ?`;
 
         const values = [
             name,
-            sku,
-            categoryName,
+            sku || null,
+            categoryName?.trim(),
             brand || null,
             description || null,
-            parseInt(stockQuantity) || 0,
-            parseFloat(costPrice) || 0.0,
+            parseFloat(buyPrice) || 0.0,
             parseFloat(sellingPrice) || 0.0,
-            mrp ? parseFloat(mrp) : null,
-            lowStockThreshold !== undefined ? parseInt(lowStockThreshold) : 5,
-            location || null,
-            unit || "Pcs",
-            supplierName ? supplierName : null,
-            status ? status.toLowerCase() : "active",
+            status || "active",
             id,
             adminId,
         ];
@@ -169,7 +151,7 @@ export const updateSparePart = async (req, res) => {
             });
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 

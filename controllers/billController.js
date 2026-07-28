@@ -124,12 +124,12 @@ export const createBill = async (req, res) => {
           const vehicleValues = [
             admin_id,
             custId,
-            vehicle_details.brand || "NA",
-            vehicle_details.model || "NA",
+            vehicle_details.brand,
+            vehicle_details.model,
             vehicleNumber,
             vehicle_details.manufacturing_year || vehicle_details.year || null,
-            vehicle_details.vehicle_type || vehicle_details.type || "Car",
-            vehicle_details.fuel_type || "Petrol",
+            vehicle_details.vehicle_type || vehicle_details.type,
+            vehicle_details.fuel_type,
           ];
 
           db.query(insertVehicleQuery, vehicleValues, (err, result) => {

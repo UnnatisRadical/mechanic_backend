@@ -115,12 +115,12 @@ export const addCustomer = async (req, res) => {
                             const vehicleValues = [
                                 admin_id,
                                 newCustomerId,
-                                brand || "NA",
-                                model || "NA",
+                                brand,
+                                model,
                                 vehicle_number,
                                 manufacturing_year || null,
                                 vehicle_type || "",
-                                status || "Active",
+                                status,
                             ];
 
                             connection.query(
@@ -372,7 +372,7 @@ export const updateCustomer = async (req, res) => {
                                         vehicle_number,
                                         manufacturing_year || null,
                                         vehicle_type || "",
-                                        status || "Active",
+                                        status,
                                     ];
 
                                     connection.query(

@@ -83,7 +83,6 @@ export const getAdminById = (req, res) => {
 
   db.query(query, [id], (err, result) => {
     if (err) {
-      console.log('Get admin error:', err);
       return res.status(500).json({
         success: false,
         message: "Database error",
@@ -388,6 +387,7 @@ export const updatePremiumStatus = (req, res) => {
     subscriptionRenewalDate,
     trialStartedAt,
     isPremium,
+    orderId,
   } = req.body;
 
   if (!adminId) {
@@ -406,8 +406,7 @@ export const updatePremiumStatus = (req, res) => {
     ? subscriptionStatus
     : 'none';
 
-  const premiumFlag =
-    status === 'trial_active' || status === 'premium_active' ? 1 : 0;
+  const premiumFlag = status === 'trial_active' || status === 'premium_active' ? 1 : 0;
 
   const startDate = subscriptionStartDate
     ? new Date(subscriptionStartDate).toISOString().slice(0, 19).replace('T', ' ')
@@ -433,7 +432,8 @@ export const updatePremiumStatus = (req, res) => {
       subscription_start_date = ?,
       subscription_expiry_date = ?,
       subscription_renewal_date = ?,
-      trial_started_at = ?
+      trial_started_at = ?,
+      subscription_order_id = ?
     WHERE id = ?
   `;
 
@@ -445,6 +445,7 @@ export const updatePremiumStatus = (req, res) => {
     expiryDate,
     renewalDate,
     trialDate,
+    orderId || null,
     adminId,
   ];
 
@@ -468,7 +469,8 @@ export const updatePremiumStatus = (req, res) => {
       data: {
         subscriptionStatus: status,
         isPremium: premiumFlag,
-        adminId
+        adminId,
+        orderId
       },
     });
   });
