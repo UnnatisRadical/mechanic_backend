@@ -42,6 +42,8 @@ export const createBill = async (req, res) => {
       !contact ||
       !payment_type ||
       !invoice_no ||
+      !vehicle_details?.vehicle_number ||
+      !payment_method ||
       (service_taken.length === 0 && parts_taken.length === 0)
     ) {
       return res.status(400).json({
