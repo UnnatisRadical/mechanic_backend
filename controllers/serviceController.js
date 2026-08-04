@@ -218,3 +218,153 @@ export const deleteService = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };
+
+export const updateCategory = (req, res) => {
+  try {
+    const { admin_id, oldCategoryName, newCategoryName } = req.body;
+
+    if (!admin_id || !oldCategoryName || !newCategoryName) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields (admin_id, oldCategoryName, newCategoryName)"
+      });
+    }
+
+    if (!newCategoryName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "New category name cannot be empty"
+      });
+    }
+
+    const trimmedNewCategoryName = newCategoryName.trim().toLowerCase();
+
+    const checkQuery = "SELECT id FROM services WHERE admin_id = ? AND (category = ? OR category = ?) LIMIT 1";
+
+    db.query(checkQuery, [admin_id, oldCategoryName, oldCategoryName.toLowerCase()], (checkErr, checkResults) => {
+      console.log("checkErr", checkErr);
+      if (checkErr) {
+        return res.status(500).json({
+          success: false,
+          message: "Database operation failed"
+        });
+      }
+
+      if (checkResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "No services found with this category"
+        });
+      }
+
+      const updateQuery = "UPDATE services SET category = ? WHERE admin_id = ? AND (category = ? OR category = ?)";
+
+      db.query(updateQuery, [trimmedNewCategoryName, admin_id, oldCategoryName, oldCategoryName.toLowerCase()], (updateErr, updateResults) => {
+        console.log("updateErr", updateErr);
+        if (updateErr) {
+          return res.status(500).json({
+            success: false,
+            message: "Database operation failed",
+            details: updateErr.message
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: "Category updated successfully",
+          affectedServices: updateResults.affectedRows,
+          categoryDetails: {
+            oldName: oldCategoryName,
+            newName: trimmedNewCategoryName,
+            servicesUpdated: updateResults.affectedRows
+          }
+        });
+      });
+    });
+
+  } catch (error) {
+    console.log("error", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      details: error.message
+    });
+  }
+};
+
+export const deleteCategory = async (req, res) => {
+  try {
+    const { admin_id, category } = req.body;
+
+    if (!admin_id || !category) {
+      return res.status(400).json({
+        success: false,
+        message: "Admin ID and category are required",
+      });
+    }
+
+    const deleteQuery = "DELETE FROM services WHERE admin_id = ? AND (category = ? OR category = ?)";
+
+    db.query(deleteQuery, [admin_id, category, category.toLowerCase()], (err, result) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Database operation failed",
+          details: err.message,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Category and related services permanently deleted",
+        deletedServices: result.affectedRows,
+      });
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+export const bulkDeleteCategories = async (req, res) => {
+  try {
+    const { admin_id, categories } = req.body;
+
+    if (!admin_id || !Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Admin ID and a non-empty categories array are required",
+      });
+    }
+
+    const normalizedCategories = categories.flatMap((cat) => [cat, cat.toLowerCase()]);
+    const placeholders = normalizedCategories.map(() => "?").join(", ");
+
+    const deleteQuery = `DELETE FROM services WHERE admin_id = ? AND category IN (${placeholders})`;
+
+    db.query(deleteQuery, [admin_id, ...normalizedCategories], (err, result) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Database operation failed",
+          details: err.message,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Categories and related services permanently deleted",
+        deletedServices: result.affectedRows,
+      });
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
