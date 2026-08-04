@@ -86,9 +86,9 @@ export const addCustomer = async (req, res) => {
                         phone,
                         email || null,
                         address || null,
-                        city || "NA",
-                        state || "NA",
-                        pin_code || "000000",
+                        city,
+                        state,
+                        pin_code,
                         notes || null,
                     ];
 
@@ -107,7 +107,8 @@ export const addCustomer = async (req, res) => {
                             }
 
                             const newCustomerId = custResult.insertId;
-
+                            const vehicleType = vehicle_type === "motorbike" ? "Bike" : vehicle_type;
+                            
                             const insertVehicleQuery = `
                             INSERT INTO vehicles (admin_id, customer_id, brand, model, vehicle_number, manufacturing_year, vehicle_type, status) 
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -119,7 +120,7 @@ export const addCustomer = async (req, res) => {
                                 model,
                                 vehicle_number,
                                 manufacturing_year || null,
-                                vehicle_type || "",
+                                vehicleType || "",
                                 status,
                             ];
 

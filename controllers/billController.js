@@ -41,6 +41,7 @@ export const createBill = async (req, res) => {
       !customer_name ||
       !contact ||
       !payment_type ||
+      !invoice_no ||
       (service_taken.length === 0 && parts_taken.length === 0)
     ) {
       return res.status(400).json({
@@ -101,6 +102,7 @@ export const createBill = async (req, res) => {
     const handleVehicleRegistration = () => {
       return new Promise((resolve, reject) => {
         const vehicleNumber = (vehicle_details?.vehicleNumber || vehicle_details?.vehicle_number)?.toUpperCase();
+        const vehicle_type = vehicle_details.vehicle_type === "motorbike" ? "Bike" : vehicle_details.vehicle_type;
 
         if (!vehicle_details || !vehicleNumber) {
           return resolve(null);
@@ -128,7 +130,7 @@ export const createBill = async (req, res) => {
             vehicle_details.model,
             vehicleNumber,
             vehicle_details.manufacturing_year || vehicle_details.year || null,
-            vehicle_details.vehicle_type || vehicle_details.type,
+            vehicle_type,
             vehicle_details.fuel_type,
           ];
 
