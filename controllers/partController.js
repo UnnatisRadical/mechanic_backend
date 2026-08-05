@@ -11,20 +11,21 @@ export const addSparePart = async (req, res) => {
             description,
             buyPrice,
             sellingPrice,
+            stockQuantity,
             status,
         } = req.body;
 
-        if (!adminId || !name || !categoryName || !buyPrice || !sellingPrice) {
+        if (!adminId || !name || !categoryName || !buyPrice || !sellingPrice || !stockQuantity) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Required fields (Name, Category, Buy and Selling Price) are missing or invalid",
+                    "Required fields (Name, Category, Buy, Selling Price and Stock Quantity) are missing or invalid",
             });
         }
 
         const sql = `INSERT INTO spare_parts (
-            admin_id, name, sku, category_name, brand, description, buy_price, selling_price, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            admin_id, name, sku, category_name, brand, description, buy_price, selling_price, base_stock_quantity, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const values = [
             adminId,
@@ -35,6 +36,7 @@ export const addSparePart = async (req, res) => {
             description || null,
             parseFloat(buyPrice) || 0.0,
             parseFloat(sellingPrice) || 0.0,
+            stockQuantity || 0,
             status || "active",
         ];
 
@@ -96,6 +98,8 @@ export const updateSparePart = async (req, res) => {
             description,
             buyPrice,
             sellingPrice,
+            baseStockQty,
+            newStockQty,
             status,
         } = req.body;
 
@@ -113,7 +117,7 @@ export const updateSparePart = async (req, res) => {
             });
         }
 
-        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, buy_price = ?, selling_price = ?, status = ? WHERE id = ? AND admin_id = ?`;
+        const sql = `UPDATE spare_parts SET name = ?, sku = ?, category_name = ?, brand = ?, description = ?, buy_price = ?, selling_price = ?, base_stock_quantity = ?, new_stock_quantity = ?, status = ? WHERE id = ? AND admin_id = ?`;
 
         const values = [
             name,
@@ -123,6 +127,8 @@ export const updateSparePart = async (req, res) => {
             description || null,
             parseFloat(buyPrice) || 0.0,
             parseFloat(sellingPrice) || 0.0,
+            baseStockQty || 0,
+            newStockQty || 0,
             status || "active",
             id,
             adminId,
