@@ -377,109 +377,6 @@ export const deleteAdminAccount = async (req, res) => {
   });
 };
 
-export const updatePremiumStatus = (req, res) => {
-  const {
-    adminId,
-    subscriptionStatus,
-    subscriptionType,
-    subscriptionExpiryDate,
-    subscriptionStartDate,
-    subscriptionRenewalDate,
-    trialStartedAt,
-    isPremium,
-    orderId,
-  } = req.body;
-
-  if (!adminId) {
-    return res.status(400).json({ success: false, message: "Admin id required" });
-  }
-
-  const VALID_STATUSES = [
-    'none',
-    'trial_active',
-    'trial_expired',
-    'premium_active',
-    'premium_expired',
-  ];
-
-  const status = VALID_STATUSES.includes(subscriptionStatus)
-    ? subscriptionStatus
-    : 'none';
-
-  const premiumFlag = status === 'trial_active' || status === 'premium_active' ? 1 : 0;
-
-  const startDate = subscriptionStartDate
-    ? new Date(subscriptionStartDate).toISOString().slice(0, 19).replace('T', ' ')
-    : null;
-
-  const expiryDate = subscriptionExpiryDate
-    ? new Date(subscriptionExpiryDate).toISOString().slice(0, 19).replace('T', ' ')
-    : null;
-
-  const renewalDate = subscriptionRenewalDate
-    ? new Date(subscriptionRenewalDate).toISOString().slice(0, 19).replace('T', ' ')
-    : null;
-
-  const trialDate = trialStartedAt
-    ? new Date(trialStartedAt).toISOString().slice(0, 19).replace('T', ' ')
-    : null;
-
-  const query = `
-    UPDATE admins SET
-      is_premium = ?,
-      subscription_status = ?,
-      subscription_type = ?,
-      subscription_start_date = ?,
-      subscription_expiry_date = ?,
-      subscription_renewal_date = ?,
-      trial_started_at = ?,
-      subscription_order_id = ?
-    WHERE id = ?
-  `;
-
-  const params = [
-    premiumFlag,
-    status,
-    subscriptionType || null,
-    startDate,
-    expiryDate,
-    renewalDate,
-    trialDate,
-    orderId || null,
-    adminId,
-  ];
-
-  db.query(query, params, (err, result) => {
-    if (err) {
-      console.error('Premium update error:', err);
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-        error: err.message,
-      });
-    }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: "Admin not found" });
-    }
-
-    return res.json({
-      success: true,
-      message: "Premium status updated",
-      data: {
-        subscriptionStatus: status,
-        isPremium: premiumFlag,
-        adminId,
-        orderId
-      },
-    });
-  });
-};
-
-export const updatePremiumStatusPUT = (req, res) => {
-  return updatePremiumStatus(req, res);
-};
-
 export const updateInvoiceNumberFormat = (req, res) => {
   const { adminId, prefix, format, digits, resetType } = req.body;
 
@@ -522,7 +419,6 @@ export const getSubscriptionAnalytics = (req, res) => {
 
   db.query(query, (err, result) => {
     if (err) {
-      console.error('Analytics error:', err);
       return res.status(500).json({
         success: false,
         message: "Database error",
@@ -556,7 +452,6 @@ export const getFreeTrialUsers = (req, res) => {
 
   db.query(query, (err, result) => {
     if (err) {
-      console.error('Get trial users error:', err);
       return res.status(500).json({
         success: false,
         message: "Database error",
@@ -605,7 +500,6 @@ export const getPremiumUsers = (req, res) => {
 
   db.query(query, (err, result) => {
     if (err) {
-      console.error('Get premium users error:', err);
       return res.status(500).json({
         success: false,
         message: "Database error",
@@ -654,7 +548,6 @@ export const getExpiredSubscriptions = (req, res) => {
 
   db.query(query, (err, result) => {
     if (err) {
-      console.error('Get expired subscriptions error:', err);
       return res.status(500).json({
         success: false,
         message: "Database error",
@@ -681,4 +574,242 @@ export const getExpiredSubscriptions = (req, res) => {
       data: formattedResult,
     });
   });
+};
+
+export const updatePremiumStatus = (req, res) => {
+  const {
+    adminId,
+    subscriptionStatus,
+    subscriptionType,
+    subscriptionExpiryDate,
+    subscriptionStartDate,
+    subscriptionRenewalDate,
+    trialStartedAt,
+    isPremium,
+    orderId,
+    formattedPrice,
+    priceAmountMicros,
+    purchaseToken
+  } = req.body;
+
+  if (!adminId) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
+
+  const VALID_STATUSES = [
+    'none',
+    'trial_active',
+    'trial_expired',
+    'premium_active',
+    'premium_expired',
+  ];
+
+  const status = VALID_STATUSES.includes(subscriptionStatus)
+    ? subscriptionStatus
+    : 'none';
+
+  const premiumFlag = status === 'trial_active' || status === 'premium_active' ? 1 : 0;
+
+  const startDate = subscriptionStartDate
+    ? new Date(subscriptionStartDate).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const expiryDate = subscriptionExpiryDate
+    ? new Date(subscriptionExpiryDate).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const renewalDate = subscriptionRenewalDate
+    ? new Date(subscriptionRenewalDate).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const trialDate = trialStartedAt
+    ? new Date(trialStartedAt).toISOString().slice(0, 19).replace('T', ' ')
+    : null;
+
+  const query = `
+    UPDATE admins SET
+      is_premium = ?,
+      subscription_status = ?,
+      subscription_type = ?,
+      subscription_start_date = ?,
+      subscription_expiry_date = ?,
+      subscription_renewal_date = ?,
+      trial_started_at = ?,
+      subscription_order_id = ?,
+      subscription_purchase_token = ?
+    WHERE id = ?
+  `;
+
+  const params = [
+    premiumFlag,
+    status,
+    subscriptionType || null,
+    startDate,
+    expiryDate,
+    renewalDate,
+    trialDate,
+    orderId || null,
+    purchaseToken || null,
+    adminId,
+  ];
+
+  db.query(query, params, (err, result) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+
+    // HISTORY MEIN ENTRY ADD KAR
+    const eventType = getEventType(status, trialDate);
+
+    const historyQuery = `
+      INSERT INTO subscription_history 
+      (admin_id, subscription_status, subscription_type, subscription_start_date, 
+       subscription_expiry_date, subscription_renewal_date, trial_started_at, 
+       order_id, purchase_token, formatted_price, price_amount_micros, event_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const historyParams = [
+      adminId, status, subscriptionType || null, startDate,
+      expiryDate, renewalDate, trialDate, orderId || null,
+      purchaseToken || null, formattedPrice || null, priceAmountMicros || null,
+      eventType
+    ];
+
+    db.query(historyQuery, historyParams, (historyErr) => {
+      if (historyErr) {
+        throw historyErr;
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: "Premium status updated",
+      data: {
+        subscriptionStatus: status,
+        isPremium: premiumFlag,
+        adminId,
+        orderId
+      },
+    });
+  });
+};
+
+export const updatePremiumStatusPUT = (req, res) => {
+  return updatePremiumStatus(req, res);
+};
+
+// Puri subscription history fetch karne ke liye
+export const getSubscriptionHistory = (req, res) => {
+  const { adminId } = req.params;
+
+  if (!adminId) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
+
+  const query = `
+    SELECT 
+      id,
+      subscription_status,
+      subscription_type,
+      subscription_start_date,
+      subscription_expiry_date,
+      subscription_renewal_date,
+      trial_started_at,
+      order_id,
+      purchase_token,
+      formatted_price,
+      price_amount_micros,
+      event_type,
+      created_at
+    FROM subscription_history
+    WHERE admin_id = ?
+    ORDER BY created_at DESC
+  `;
+
+  db.query(query, [adminId], (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    const formattedResults = results.map(record => ({
+      ...record,
+      subscription_start_date: record.subscription_start_date
+        ? new Date(record.subscription_start_date).toISOString()
+        : null,
+      subscription_expiry_date: record.subscription_expiry_date
+        ? new Date(record.subscription_expiry_date).toISOString()
+        : null,
+      trial_started_at: record.trial_started_at
+        ? new Date(record.trial_started_at).toISOString()
+        : null,
+      created_at: record.created_at
+        ? new Date(record.created_at).toISOString()
+        : null,
+    }));
+
+    return res.json({
+      success: true,
+      count: results.length,
+      data: formattedResults,
+    });
+  });
+};
+
+// Analytics - Overall subscription timeline
+export const getSubscriptionTimeline = (req, res) => {
+  const { adminId } = req.params;
+
+  if (!adminId) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
+
+  const query = `
+    SELECT 
+      DATE(created_at) as date,
+      event_type,
+      COUNT(*) as count,
+      subscription_status,
+      formatted_price
+    FROM subscription_history
+    WHERE admin_id = ?
+    GROUP BY DATE(created_at), event_type, subscription_status
+    ORDER BY created_at DESC
+  `;
+
+  db.query(query, [adminId], (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: results,
+    });
+  });
+};
+
+const getEventType = (status, trialDate) => {
+  if (status === 'trial_active') return 'trial_started';
+  if (status === 'trial_expired') return 'trial_expired';
+  if (status === 'premium_active' && !trialDate) return 'subscription_purchase';
+  if (status === 'premium_active' && trialDate) return 'trial_to_premium';
+  if (status === 'premium_expired') return 'subscription_expired';
+  return 'unknown';
 };

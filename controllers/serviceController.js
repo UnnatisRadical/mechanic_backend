@@ -242,7 +242,6 @@ export const updateCategory = (req, res) => {
     const checkQuery = "SELECT id FROM services WHERE admin_id = ? AND (category = ? OR category = ?) LIMIT 1";
 
     db.query(checkQuery, [admin_id, oldCategoryName, oldCategoryName.toLowerCase()], (checkErr, checkResults) => {
-      console.log("checkErr", checkErr);
       if (checkErr) {
         return res.status(500).json({
           success: false,
@@ -260,7 +259,6 @@ export const updateCategory = (req, res) => {
       const updateQuery = "UPDATE services SET category = ? WHERE admin_id = ? AND (category = ? OR category = ?)";
 
       db.query(updateQuery, [trimmedNewCategoryName, admin_id, oldCategoryName, oldCategoryName.toLowerCase()], (updateErr, updateResults) => {
-        console.log("updateErr", updateErr);
         if (updateErr) {
           return res.status(500).json({
             success: false,
@@ -283,7 +281,6 @@ export const updateCategory = (req, res) => {
     });
 
   } catch (error) {
-    console.log("error", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
