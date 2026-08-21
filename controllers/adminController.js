@@ -576,7 +576,6 @@ export const getExpiredSubscriptions = (req, res) => {
   });
 };
 
-// यह सिर्फ updatePremiumStatus function का fixed version है
 export const updatePremiumStatus = (req, res) => {
   const {
     adminId,
@@ -624,53 +623,56 @@ export const updatePremiumStatus = (req, res) => {
     ? new Date(trialStartedAt).toISOString().slice(0, 19).replace('T', ' ')
     : null;
 
-  // Check for exact duplicates within last 5 seconds
-  const checkDuplicateQuery = `
-    SELECT id FROM subscription_history
-    WHERE admin_id = ? 
-    AND subscription_status = ?
-    AND subscription_expiry_date <=> ?
-    AND created_at >= DATE_SUB(NOW(), INTERVAL 5 SECOND)
-    LIMIT 1
+  // Step 1: Update admins table
+  const updateQuery = `
+    UPDATE admins SET
+      is_premium = ?,
+      subscription_status = ?,
+      subscription_type = ?,
+      subscription_start_date = ?,
+      subscription_expiry_date = ?,
+      subscription_renewal_date = ?,
+      trial_started_at = ?,
+      subscription_order_id = ?,
+      subscription_purchase_token = ?
+    WHERE id = ?
   `;
 
   db.query(
-    checkDuplicateQuery,
-    [adminId, status, expiryDate],
-    (dupErr, dupResult) => {
-      if (dupErr) {
-        return res.status(500).json({ success: false, message: "Duplicate check failed" });
+    updateQuery,
+    [premiumFlag, status, subscriptionType || null, startDate, expiryDate, renewalDate, trialDate, orderId || null, purchaseToken || null, adminId],
+    (err, result) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: "Database error", error: err.message });
       }
 
-      // यहाँ duplicate है या नहीं, हर case में admins update करो
-      const updateQuery = `
-        UPDATE admins SET
-          is_premium = ?,
-          subscription_status = ?,
-          subscription_type = ?,
-          subscription_start_date = ?,
-          subscription_expiry_date = ?,
-          subscription_renewal_date = ?,
-          trial_started_at = ?,
-          subscription_order_id = ?,
-          subscription_purchase_token = ?
-        WHERE id = ?
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "Admin not found" });
+      }
+
+      // Step 2: Check for duplicate in subscription_history (within last 5 seconds)
+      const checkDuplicateQuery = `
+        SELECT id FROM subscription_history
+        WHERE admin_id = ? 
+        AND subscription_status = ?
+        AND subscription_expiry_date <=> ?
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 5 SECOND)
+        LIMIT 1
       `;
 
       db.query(
-        updateQuery,
-        [premiumFlag, status, subscriptionType || null, startDate, expiryDate, renewalDate, trialDate, orderId || null, purchaseToken || null, adminId],
-        (err, result) => {
-          if (err) {
-            return res.status(500).json({ success: false, message: "Database error", error: err.message });
+        checkDuplicateQuery,
+        [adminId, status, expiryDate],
+        (dupErr, dupResult) => {
+          if (dupErr) {
+            console.error('Duplicate check error:', dupErr);
+            // Continue with insertion even if duplicate check fails
           }
 
-          if (result.affectedRows === 0) {
-            return res.status(404).json({ success: false, message: "Admin not found" });
-          }
+          // Step 3: If NO duplicate found, insert into subscription_history
+          const isDuplicate = dupResult && dupResult.length > 0;
 
-          // अगर duplicate नहीं है तो ही history insert करो
-          if (!dupResult || dupResult.length === 0) {
+          if (!isDuplicate) {
             const eventType = getEventType(status, trialDate);
             const historyQuery = `
               INSERT INTO subscription_history 
@@ -686,20 +688,32 @@ export const updatePremiumStatus = (req, res) => {
               (historyErr, historyResult) => {
                 if (historyErr) {
                   console.error('History save error:', historyErr);
-                } else {
-                  console.log('History record inserted:', historyResult.insertId);
+                  return res.status(500).json({ 
+                    success: false, 
+                    message: "Failed to save subscription history", 
+                    error: historyErr.message 
+                  });
                 }
+
+                console.log('✅ History record inserted:', historyResult.insertId);
+
+                return res.json({
+                  success: true,
+                  message: "Premium status updated and history recorded",
+                  data: { subscriptionStatus: status, isPremium: premiumFlag, adminId, orderId, purchaseToken, historyId: historyResult.insertId }
+                });
               }
             );
           } else {
-            console.log('Duplicate subscription detected, skipping history insert');
-          }
+            // Duplicate found, don't insert but still return success
+            console.log('⚠️ Duplicate subscription detected, skipping history insert');
 
-          return res.json({
-            success: true,
-            message: dupResult && dupResult.length > 0 ? "Premium status updated (duplicate prevented)" : "Premium status updated",
-            data: { subscriptionStatus: status, isPremium: premiumFlag, adminId, orderId, purchaseToken }
-          });
+            return res.json({
+              success: true,
+              message: "Premium status updated (duplicate prevented)",
+              data: { subscriptionStatus: status, isPremium: premiumFlag, adminId, orderId, purchaseToken, isDuplicate: true }
+            });
+          }
         }
       );
     }
@@ -708,6 +722,15 @@ export const updatePremiumStatus = (req, res) => {
 
 export const updatePremiumStatusPUT = (req, res) => {
   return updatePremiumStatus(req, res);
+};
+
+const getEventType = (status, trialDate) => {
+  if (status === 'trial_active') return 'trial_started';
+  if (status === 'trial_expired') return 'trial_expired';
+  if (status === 'premium_active' && !trialDate) return 'subscription_purchase';
+  if (status === 'premium_active' && trialDate) return 'trial_to_premium';
+  if (status === 'premium_expired') return 'subscription_expired';
+  return 'unknown';
 };
 
 export const getSubscriptionHistory = (req, res) => {
@@ -805,13 +828,4 @@ export const getSubscriptionTimeline = (req, res) => {
       data: results,
     });
   });
-};
-
-const getEventType = (status, trialDate) => {
-  if (status === 'trial_active') return 'trial_started';
-  if (status === 'trial_expired') return 'trial_expired';
-  if (status === 'premium_active' && !trialDate) return 'subscription_purchase';
-  if (status === 'premium_active' && trialDate) return 'trial_to_premium';
-  if (status === 'premium_expired') return 'subscription_expired';
-  return 'unknown';
 };
