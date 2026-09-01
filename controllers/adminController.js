@@ -324,7 +324,8 @@ export const deleteAdminAccount = async (req, res) => {
             "services",
             "spare_parts",
             "tax_details",
-            "vehicles"
+            "vehicles",
+            "subscription_history"
           ];
 
           for (const table of relatedTables) {
@@ -492,10 +493,11 @@ export const getPremiumUsers = (req, res) => {
       subscription_start_date,
       subscription_expiry_date,
       subscription_renewal_date,
+      subscription_formatted_price as formatted_price,
       created_at
     FROM admins 
     WHERE subscription_status = 'premium_active'
-    ORDER BY subscription_start_date DESC
+    ORDER BY subscription_renewal_date ASC
   `;
 
   db.query(query, (err, result) => {
@@ -518,6 +520,9 @@ export const getPremiumUsers = (req, res) => {
       subscription_renewal_date: user.subscription_renewal_date
         ? new Date(user.subscription_renewal_date).toISOString()
         : null,
+      days_until_renewal: user.subscription_renewal_date
+        ? Math.ceil((new Date(user.subscription_renewal_date) - new Date()) / (1000 * 60 * 60 * 24))
+        : null
     }));
 
     return res.json({
@@ -566,6 +571,9 @@ export const getExpiredSubscriptions = (req, res) => {
       trial_started_at: user.trial_started_at
         ? new Date(user.trial_started_at).toISOString()
         : null,
+      days_expired: user.subscription_expiry_date
+        ? Math.floor((new Date() - new Date(user.subscription_expiry_date)) / (1000 * 60 * 60 * 24))
+        : null
     }));
 
     return res.json({
@@ -574,6 +582,135 @@ export const getExpiredSubscriptions = (req, res) => {
       data: formattedResult,
     });
   });
+};
+
+/**
+ * Handle subscription renewal
+ * Called when subscription auto-renews or manually triggered
+ * Updates admin table with new renewal dates and creates history entry
+ */
+export const handleSubscriptionRenewal = (req, res) => {
+  const {
+    adminId,
+    orderId,
+    purchaseToken,
+    formattedPrice,
+    priceAmountMicros
+  } = req.body;
+
+  if (!adminId) {
+    return res.status(400).json({ success: false, message: "Admin id required" });
+  }
+
+  // Step 1: Get current subscription data
+  db.query(
+    "SELECT * FROM admins WHERE id = ?",
+    [adminId],
+    (err, results) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: "Database error", error: err.message });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "Admin not found" });
+      }
+
+      const admin = results[0];
+
+      // Step 2: Insert current state into subscription_history (BEFORE updating)
+      const now = new Date();
+      const historyQuery = `
+        INSERT INTO subscription_history 
+        (admin_id, subscription_status, subscription_type, subscription_start_date, 
+         subscription_expiry_date, subscription_renewal_date, trial_started_at, 
+         is_premium, order_id, purchase_token, formatted_price, price_amount_micros, event_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RENEWAL')
+      `;
+
+      db.query(
+        historyQuery,
+        [
+          adminId,
+          admin.subscription_status,
+          admin.subscription_type,
+          admin.subscription_start_date,
+          admin.subscription_expiry_date,
+          admin.subscription_renewal_date,
+          admin.trial_started_at,
+          admin.is_premium,
+          admin.subscription_order_id || orderId,
+          admin.subscription_purchase_token || purchaseToken,
+          admin.subscription_formatted_price || formattedPrice,
+          admin.subscription_price_amount_micros || priceAmountMicros
+        ],
+        (historyErr) => {
+          if (historyErr) {
+            console.error('History insert error:', historyErr);
+            return res.status(500).json({ success: false, message: "Failed to save renewal history", error: historyErr.message });
+          }
+
+          // Step 3: Calculate new renewal dates
+          // Previous renewal date becomes new subscription start
+          const newSubscriptionStart = admin.subscription_renewal_date || now;
+          
+          // New expiry is 30 days from new start
+          const newSubscriptionExpiry = new Date(newSubscriptionStart);
+          newSubscriptionExpiry.setDate(newSubscriptionExpiry.getDate() + 30);
+          
+          // Next renewal is 30 days from new expiry
+          const nextRenewalDate = new Date(newSubscriptionExpiry);
+          nextRenewalDate.setDate(nextRenewalDate.getDate() + 30);
+
+          // Step 4: Update admin table with new dates
+          const updateQuery = `
+            UPDATE admins SET
+              subscription_status = 'premium_active',
+              subscription_start_date = ?,
+              subscription_expiry_date = ?,
+              subscription_renewal_date = ?,
+              is_premium = true,
+              subscription_order_id = ?,
+              subscription_purchase_token = ?,
+              subscription_formatted_price = ?,
+              subscription_price_amount_micros = ?,
+              updated_at = NOW()
+            WHERE id = ?
+          `;
+
+          db.query(
+            updateQuery,
+            [
+              newSubscriptionStart,
+              newSubscriptionExpiry,
+              nextRenewalDate,
+              orderId || admin.subscription_order_id,
+              purchaseToken || admin.subscription_purchase_token,
+              formattedPrice || admin.subscription_formatted_price,
+              priceAmountMicros || admin.subscription_price_amount_micros,
+              adminId
+            ],
+            (updateErr) => {
+              if (updateErr) {
+                return res.status(500).json({ success: false, message: "Failed to update subscription", error: updateErr.message });
+              }
+
+              return res.json({
+                success: true,
+                message: "Subscription renewed successfully",
+                data: {
+                  adminId,
+                  subscription_status: 'premium_active',
+                  subscription_start_date: newSubscriptionStart.toISOString(),
+                  subscription_expiry_date: newSubscriptionExpiry.toISOString(),
+                  subscription_renewal_date: nextRenewalDate.toISOString()
+                }
+              });
+            }
+          );
+        }
+      );
+    }
+  );
 };
 
 export const updatePremiumStatus = (req, res) => {
@@ -634,13 +771,15 @@ export const updatePremiumStatus = (req, res) => {
       subscription_renewal_date = ?,
       trial_started_at = ?,
       subscription_order_id = ?,
-      subscription_purchase_token = ?
+      subscription_purchase_token = ?,
+      subscription_formatted_price = ?,
+      subscription_price_amount_micros = ?
     WHERE id = ?
   `;
 
   db.query(
     updateQuery,
-    [premiumFlag, status, subscriptionType || null, startDate, expiryDate, renewalDate, trialDate, orderId || null, purchaseToken || null, adminId],
+    [premiumFlag, status, subscriptionType || null, startDate, expiryDate, renewalDate, trialDate, orderId || null, purchaseToken || null, formattedPrice || null, priceAmountMicros || null, adminId],
     (err, result) => {
       if (err) {
         return res.status(500).json({ success: false, message: "Database error", error: err.message });
@@ -666,10 +805,8 @@ export const updatePremiumStatus = (req, res) => {
         (dupErr, dupResult) => {
           if (dupErr) {
             console.error('Duplicate check error:', dupErr);
-            // Continue with insertion even if duplicate check fails
           }
 
-          // Step 3: If NO duplicate found, insert into subscription_history
           const isDuplicate = dupResult && dupResult.length > 0;
 
           if (!isDuplicate) {
@@ -705,7 +842,6 @@ export const updatePremiumStatus = (req, res) => {
               }
             );
           } else {
-            // Duplicate found, don't insert but still return success
             console.log('⚠️ Duplicate subscription detected, skipping history insert');
 
             return res.json({
@@ -754,6 +890,7 @@ export const getSubscriptionHistory = (req, res) => {
       formatted_price,
       price_amount_micros,
       event_type,
+      is_premium,
       created_at
     FROM subscription_history
     WHERE admin_id = ?
@@ -777,6 +914,9 @@ export const getSubscriptionHistory = (req, res) => {
       subscription_expiry_date: record.subscription_expiry_date
         ? new Date(record.subscription_expiry_date).toISOString()
         : null,
+      subscription_renewal_date: record.subscription_renewal_date
+        ? new Date(record.subscription_renewal_date).toISOString()
+        : null,
       trial_started_at: record.trial_started_at
         ? new Date(record.trial_started_at).toISOString()
         : null,
@@ -793,7 +933,6 @@ export const getSubscriptionHistory = (req, res) => {
   });
 };
 
-// Analytics - Overall subscription timeline
 export const getSubscriptionTimeline = (req, res) => {
   const { adminId } = req.params;
 
@@ -826,6 +965,111 @@ export const getSubscriptionTimeline = (req, res) => {
     return res.json({
       success: true,
       data: results,
+    });
+  });
+};
+
+/**
+ * Get upcoming renewals (next 7 days)
+ */
+export const getUpcomingRenewals = (req, res) => {
+  const query = `
+    SELECT 
+      id,
+      shop_name,
+      email,
+      contact,
+      subscription_renewal_date,
+      subscription_formatted_price as formatted_price,
+      subscription_status,
+      DATEDIFF(subscription_renewal_date, NOW()) as days_until_renewal
+    FROM admins
+    WHERE subscription_renewal_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY)
+      AND subscription_status = 'premium_active'
+    ORDER BY subscription_renewal_date ASC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    const formattedResults = results.map(user => ({
+      ...user,
+      subscription_renewal_date: user.subscription_renewal_date
+        ? new Date(user.subscription_renewal_date).toISOString()
+        : null
+    }));
+
+    return res.json({
+      success: true,
+      count: results.length,
+      data: formattedResults,
+    });
+  });
+};
+
+/**
+ * Get subscription churn rate (users who didn't renew)
+ */
+export const getChurnAnalytics = (req, res) => {
+  const query = `
+    SELECT 
+      COUNT(*) as total_churned_users,
+      SUM(CASE WHEN subscription_status = 'trial_expired' THEN 1 ELSE 0 END) as trial_churned,
+      SUM(CASE WHEN subscription_status = 'premium_expired' THEN 1 ELSE 0 END) as premium_churned,
+      SUM(CASE WHEN subscription_status IN ('trial_expired', 'premium_expired') AND subscription_expiry_date >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as churned_last_30_days
+    FROM admins
+    WHERE subscription_status IN ('trial_expired', 'premium_expired')
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: results[0],
+    });
+  });
+};
+
+/**
+ * Get revenue analytics (monthly recurring revenue)
+ */
+export const getRevenueAnalytics = (req, res) => {
+  const query = `
+    SELECT 
+      COUNT(DISTINCT admin_id) as active_subscribers,
+      SUM(CASE WHEN price_amount_micros IS NOT NULL THEN price_amount_micros / 1000000 ELSE 0 END) as total_mrr,
+      AVG(CASE WHEN price_amount_micros IS NOT NULL THEN price_amount_micros / 1000000 ELSE 0 END) as avg_price,
+      MAX(CASE WHEN price_amount_micros IS NOT NULL THEN price_amount_micros / 1000000 ELSE 0 END) as max_price
+    FROM subscription_history
+    WHERE event_type IN ('subscription_purchase', 'RENEWAL', 'trial_to_premium')
+      AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Database error",
+        error: err.message,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: results[0],
     });
   });
 };
