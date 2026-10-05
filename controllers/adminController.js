@@ -645,18 +645,17 @@ export const handleSubscriptionRenewal = (req, res) => {
         ],
         (historyErr) => {
           if (historyErr) {
-            console.error('History insert error:', historyErr);
             return res.status(500).json({ success: false, message: "Failed to save renewal history", error: historyErr.message });
           }
 
           // Step 3: Calculate new renewal dates
           // Previous renewal date becomes new subscription start
           const newSubscriptionStart = admin.subscription_renewal_date || now;
-          
+
           // New expiry is 30 days from new start
           const newSubscriptionExpiry = new Date(newSubscriptionStart);
           newSubscriptionExpiry.setDate(newSubscriptionExpiry.getDate() + 30);
-          
+
           // Next renewal is 30 days from new expiry
           const nextRenewalDate = new Date(newSubscriptionExpiry);
           nextRenewalDate.setDate(nextRenewalDate.getDate() + 30);
@@ -803,10 +802,6 @@ export const updatePremiumStatus = (req, res) => {
         checkDuplicateQuery,
         [adminId, status, expiryDate],
         (dupErr, dupResult) => {
-          if (dupErr) {
-            console.error('Duplicate check error:', dupErr);
-          }
-
           const isDuplicate = dupResult && dupResult.length > 0;
 
           if (!isDuplicate) {
@@ -824,15 +819,12 @@ export const updatePremiumStatus = (req, res) => {
               [adminId, status, subscriptionType || null, startDate, expiryDate, renewalDate, trialDate, orderId || null, purchaseToken || null, formattedPrice || null, priceAmountMicros || null, eventType],
               (historyErr, historyResult) => {
                 if (historyErr) {
-                  console.error('History save error:', historyErr);
-                  return res.status(500).json({ 
-                    success: false, 
-                    message: "Failed to save subscription history", 
-                    error: historyErr.message 
+                  return res.status(500).json({
+                    success: false,
+                    message: "Failed to save subscription history",
+                    error: historyErr.message
                   });
                 }
-
-                console.log('✅ History record inserted:', historyResult.insertId);
 
                 return res.json({
                   success: true,
@@ -842,8 +834,9 @@ export const updatePremiumStatus = (req, res) => {
               }
             );
           } else {
-            console.log('⚠️ Duplicate subscription detected, skipping history insert');
 
+
+            
             return res.json({
               success: true,
               message: "Premium status updated (duplicate prevented)",

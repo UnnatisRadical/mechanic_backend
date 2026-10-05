@@ -15,6 +15,7 @@ import profitRoutes from "./routes/profitRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import partRoutes from './routes/partRoutes.js';
 import vehicleRoutes from './routes/vehicleRoutes.js';
+import estimateRoutes from "./routes/estimateRoute.js";
 
 dotenv.config();
 const app = express();
@@ -41,6 +42,7 @@ app.use('/api/profit', profitRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/parts', partRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use("/api/estimates", estimateRoutes);
 
 const PORT = process.env.PORT || 9000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
